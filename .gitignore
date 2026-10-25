@@ -1,0 +1,20 @@
+# Keep the repository scoped to Java Blueprints; Desktop contains unrelated files.
+*
+!.gitignore
+!README.md
+!start-all.bat
+!adskiy-dro__--java--ilnya.java
+!Backend/
+!Backend/**
+!frontend/
+!frontend/**
+
+# Generated and local files
+Backend/.gradle/
+Backend/build/
+Backend/.idea/
+frontend/node_modules/
+frontend/dist/
+frontend/.vite/
+*.log
+*.pdf

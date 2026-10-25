@@ -1,0 +1,17 @@
+*.class
+*.log
+hs_err_pid*.log
+*.iml
+.gradle/
+build/
+out/
+.idea/
+*.iws
+*.ipr
+*.swp
+*~
+.DS_Store
+!gradle/
+!gradle/wrapper/
+!gradle/wrapper/gradle-wrapper.jar
+!gradle/wrapper/gradle-wrapper.properties

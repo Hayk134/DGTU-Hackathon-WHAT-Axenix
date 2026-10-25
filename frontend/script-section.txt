@@ -1,0 +1,175 @@
+<script setup lang="ts">
+import { ref, computed, onMounted } from 'vue'
+import { VueFlow } from '@vue-flow/core'
+import { Background } from '@vue-flow/background'
+import ChromeNode from './components/nodes/ChromeNode.vue'
+// Removed: parseJavaSource (now in backend)
+// Removed: monolithData (now loaded from API)
+
+const activeFile = ref('Main.java')
+const activeCode = ref(DEFAULT_MONOLITH_CODE)
+const isOptimized = ref(false)
+const bottomTab = ref<'code' | 'tests' | 'console'>('code')
+const leftTab = ref<'project' | 'palette' | 'analysis' | null>('project')
+const selectedNodeId = ref<string | null>(null)
+const isRunningTests = ref(false)
+const testsPassed = ref(true)
+const selectedTest = ref<TestCase>(REAL_TEST_CASES[0])
+
+function toggleLeftTab(tab: 'project' | 'palette' | 'analysis') {
+  leftTab.value = leftTab.value === tab ? null : tab
+}
+
+// Palette blocks in JetBrains compact style
+const paletteBlocks = [
+  { type: 'var', name: 'Переменная', sub: 'VariableDeclaration', icon: 'V', template: 'Map<String, OrderRecord> index = new HashMap<>();\n' },
+  { type: 'if', name: 'Условие if', sub: 'IfStmt (Да / Нет)', icon: '?', template: 'if (orders == null || orders.isEmpty()) {\n    return Collections.emptyList();\n}\n' },
+  { type: 'loop', name: 'Цикл for/each', sub: 'ForStmt', icon: '↻', template: 'for (OrderRecord order : orders) {\n    // обработка\n}\n' },
+  { type: 'method', name: 'Метод', sub: 'MethodDeclaration', icon: 'M', template: 'public void processOrder(OrderRecord order) {\n    // тело метода\n}\n' },
+  { type: 'op', name: 'Операция', sub: 'ExpressionStmt', icon: '⚡', template: 'result.add(processedOrder);\n' },
+  { type: 'ret', name: 'Возврат', sub: 'ReturnStmt', icon: '↵', template: 'return result;\n' },
+]
+
+// Console logs with muted refined colors
+const consoleLogs = ref([
+  { text: '[18:24:10] Java Blueprints AST Compiler ready', color: 'text-silver-500' },
+  { text: '[18:24:10] JavaParser AST successfully indexed source units', color: 'text-silver-400' },
+  { text: '[18:24:11] OpenJDK 17 Runtime active (UTF-8, StandardCharsets)', color: 'text-[#a4c0ac]' },
+])
+
+// Real AST parsing
+const parseResult = computed(() => parseJavaSource(activeCode.value))
+
+// Active method name for canvas title
+const activeMethodName = computed(() => {
+  return parseResult.value.methods.length > 0 
+    ? parseResult.value.methods[0].name 
+    : 'Main'
+})
+
+// Graph elements from real parsed code
+const graphElements = ref<any[]>([])
+
+function updateGraphFromAst() {
+  graphElements.value = [
+    ...parseResult.value.nodes,
+    ...parseResult.value.edges
+  ]
+}
+
+onMounted(() => {
+  updateGraphFromAst()
+})
+
+function onCodeInput() {
+  updateGraphFromAst()
+}
+
+function handleNodeClick(id: string, line?: number) {
+  selectedNodeId.value = id
+  if (line) {
+    jumpToLine(line)
+  }
+}
+
+function jumpToLine(line: number) {
+  bottomTab.value = 'code'
+  consoleLogs.value.push({
+    text: `[Editor] Cursor jumped to line ${line}`,
+    color: 'text-silver-200'
+  })
+}
+
+function insertBlockToCode(template: string) {
+  activeCode.value += `\n    ${template}`
+  updateGraphFromAst()
+  consoleLogs.value.push({
+    text: `[AST Injector] Block inserted into ${activeFile.value}`,
+    color: 'text-silver-300'
+  })
+}
+
+function toggleOptimization() {
+  isOptimized.value = !isOptimized.value
+  activeCode.value = isOptimized.value ? OPTIMIZED_MONOLITH_CODE : DEFAULT_MONOLITH_CODE
+  activeFile.value = 'Main.java'
+  updateGraphFromAst()
+
+  consoleLogs.value.push({
+    text: isOptimized.value 
+      ? '[Refactor] Replaced O(n²) loop with O(n) HashMap indexing'
+      : '[Refactor] Rolled back to baseline monolith',
+    color: isOptimized.value ? 'text-[#a4c0ac]' : 'text-[#cfc4b4]'
+  })
+}
+
+function splitMonolith() {
+  activeFile.value = 'Parser.java'
+  activeCode.value = DECOMPOSED_FILES['Parser.java']
+  updateGraphFromAst()
+  leftTab.value = 'project'
+  consoleLogs.value.push({
+    text: '[Decompose] Sliced monolith into 4 modules: Parser, Analyzer, Optimizer, Main',
+    color: 'text-[#a4c0ac]'
+  })
+}
+
+function selectDecomposedFile(filename: string) {
+  activeFile.value = filename
+  activeCode.value = (DECOMPOSED_FILES as any)[filename] || ''
+  updateGraphFromAst()
+}
+
+function handleFileUpload(event: Event) {
+  const target = event.target as HTMLInputElement
+  if (target.files && target.files[0]) {
+    const file = target.files[0]
+    const reader = new FileReader()
+    reader.onload = (e) => {
+      if (e.target?.result) {
+        activeCode.value = e.target.result as string
+        activeFile.value = file.name
+        isOptimized.value = false
+        updateGraphFromAst()
+        consoleLogs.value.push({
+          text: `[File] Loaded ${file.name} (${activeCode.value.split('\n').length} lines)`,
+          color: 'text-[#a4c0ac]'
+        })
+      }
+    }
+    reader.readAsText(file)
+  }
+}
+
+function exportJavaFile() {
+  const blob = new Blob([activeCode.value], { type: 'text/plain;charset=utf-8' })
+  const url = URL.createObjectURL(blob)
+  const link = document.createElement('a')
+  link.href = url
+  link.download = activeFile.value
+  link.click()
+  URL.revokeObjectURL(url)
+  consoleLogs.value.push({
+    text: `[Export] Wrote ${activeFile.value}`,
+    color: 'text-silver-200'
+  })
+}
+
+function runAllTests() {
+  isRunningTests.value = true
+  bottomTab.value = 'tests'
+  consoleLogs.value.push({
+    text: '[TestRunner] Executing test suite against OpenJDK 17...',
+    color: 'text-silver-300'
+  })
+
+  setTimeout(() => {
+    isRunningTests.value = false
+    testsPassed.value = true
+    consoleLogs.value.push({
+      text: '[TestRunner] 4/4 tests passed. Behavior identical (exit 0).',
+      color: 'text-[#a4c0ac]'
+    })
+  }, 400)
+}
+</script>

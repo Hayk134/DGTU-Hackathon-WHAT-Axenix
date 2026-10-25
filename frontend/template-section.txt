@@ -1,0 +1,416 @@
+<template>
+  <div class="h-screen w-screen flex flex-col bg-[#050608] text-silver-300 overflow-hidden font-sans select-none">
+    
+    <!-- 1. TOP MAIN TOOLBAR (JetBrains New UI Layout) -->
+    <header class="h-10 border-b border-white/[0.10] bg-[#0c0e14] px-3 flex items-center justify-between shrink-0 z-30 select-none">
+      
+      <!-- Left: Brand & Breadcrumbs -->
+      <div class="flex items-center gap-3">
+        <!-- JetBrains-style App Icon -->
+        <div class="w-6 h-6 rounded bg-[#161a25] border border-white/20 flex items-center justify-center text-xs font-bold text-white shadow-[0_1px_4px_rgba(0,0,0,0.5)]">
+          <span class="font-mono text-[10px]">JB</span>
+        </div>
+
+        <!-- Project & Scope Selector -->
+        <div class="flex items-center gap-1.5 text-xs">
+          <span class="font-bold text-white tracking-wide">Java Blueprints</span>
+          <span class="text-silver-500 font-mono text-[11px]">[axenix-monolith]</span>
+          <span class="text-white/20">/</span>
+          <span class="font-mono text-silver-400 text-xs flex items-center gap-1">
+            <span class="text-silver-300">src</span>
+            <span class="text-silver-600">›</span>
+            <span class="text-silver-200">{{ activeFile }}</span>
+          </span>
+        </div>
+      </div>
+
+      <!-- Center: JetBrains Unified Run Widget -->
+      <div class="flex items-center gap-2">
+        <div class="jb-run-widget">
+          <!-- Configuration Name -->
+          <div class="jb-run-widget-part cursor-pointer">
+            <span class="text-silver-400 text-[10px]">☕</span>
+            <span>Main [Application]</span>
+            <span class="text-silver-600 text-[10px]">▼</span>
+          </div>
+
+          <!-- Play / Run Button -->
+          <button 
+            @click="runAllTests"
+            :disabled="isRunningTests"
+            class="px-3 h-full bg-gradient-to-b from-white to-silver-300 hover:brightness-110 text-black font-semibold text-xs flex items-center gap-1.5 transition-all"
+            title="Run All Tests (Shift+F10)"
+          >
+            <span v-if="isRunningTests" class="w-2.5 h-2.5 border-2 border-black border-t-transparent rounded-full animate-spin"></span>
+            <span v-else class="text-[10px]">▶</span>
+            <span>Запуск</span>
+          </button>
+        </div>
+
+        <!-- Quick Optimize Button in Segmented Style -->
+        <button 
+          @click="toggleOptimization"
+          class="h-7 px-3 rounded bg-[#161a25] hover:bg-[#1e2332] border border-white/18 text-xs font-medium text-silver-200 hover:text-white flex items-center gap-1.5 transition-all shadow-[0_1px_3px_rgba(0,0,0,0.4)]"
+          :class="isOptimized ? '!border-[#85a38f]/60 !text-[#a4c0ac] !bg-[#121a15]' : ''"
+        >
+          <span class="text-[10px]">⚡</span>
+          <span>{{ isOptimized ? 'Оптимизировано O(n)' : 'Оптимизировать O(n²)' }}</span>
+        </button>
+
+        <!-- Import / Export Actions -->
+        <label class="jb-icon-btn cursor-pointer" title="Импорт .java файла">
+          <span class="text-xs">↑</span>
+          <input type="file" accept=".java,.txt" class="hidden" @change="handleFileUpload" />
+        </label>
+        <button @click="exportJavaFile" class="jb-icon-btn" title="Экспорт текущего файла">
+          <span class="text-xs">↓</span>
+        </button>
+      </div>
+
+      <!-- Right: Inspection & Search Everywhere Widget -->
+      <div class="flex items-center gap-3">
+        <!-- Inspection Widget -->
+        <div 
+          @click="leftTab = 'analysis'"
+          class="flex items-center gap-1.5 px-2.5 py-1 rounded bg-[#12151f] border border-white/10 text-xs font-mono cursor-pointer hover:border-white/20 transition-all"
+          :title="isOptimized ? '0 errors, 0 warnings' : '1 critical defect O(n²)'"
+        >
+          <span class="w-2 h-2 rounded-full" :class="isOptimized ? 'bg-[#8ea896]' : 'bg-[#cfc4b4]'"></span>
+          <span class="text-silver-200 font-semibold">{{ isOptimized ? '0 ошибок' : '1 дефект' }}</span>
+          <span class="text-silver-500 text-[10px]">({{ parseResult.overallBigO }})</span>
+        </div>
+
+        <!-- Search Everywhere Keybinding Pill -->
+        <div class="hidden lg:flex items-center gap-1 px-2 py-1 rounded bg-white/[0.04] border border-white/10 text-[11px] font-mono text-silver-400">
+          <span>Search</span>
+          <kbd class="px-1 bg-white/10 rounded text-[9px] text-silver-300">⌘K</kbd>
+        </div>
+      </div>
+    </header>
+
+    <!-- 2. MAIN WORKSPACE (Stripe + Tool Window + Canvas + Editor) -->
+    <div class="flex-1 flex overflow-hidden">
+      
+      <!-- FAR-LEFT VERTICAL STRIPE (JetBrains Tool Stripe: 38px) -->
+      <nav class="w-10 border-r border-white/[0.08] bg-[#090b10] flex flex-col items-center py-2 gap-1 shrink-0 z-20">
+        <button 
+          @click="toggleLeftTab('project')" 
+          class="jb-stripe-btn" 
+          :class="{ active: leftTab === 'project' }"
+          title="Project Explorer (Alt+1)"
+        >
+          <span class="text-sm">📁</span>
+        </button>
+
+        <button 
+          @click="toggleLeftTab('palette')" 
+          class="jb-stripe-btn" 
+          :class="{ active: leftTab === 'palette' }"
+          title="Java Block Palette"
+        >
+          <span class="text-sm">🧩</span>
+        </button>
+
+        <button 
+          @click="toggleLeftTab('analysis')" 
+          class="jb-stripe-btn" 
+          :class="{ active: leftTab === 'analysis' }"
+          title="Problems & Big O Inspection"
+        >
+          <span class="text-sm">📊</span>
+        </button>
+
+        <!-- Bottom Stripe Actions -->
+        <div class="mt-auto flex flex-col items-center gap-1">
+          <button 
+            @click="splitMonolith" 
+            class="jb-stripe-btn" 
+            title="Декомпозировать монолит на 4 файла"
+          >
+            <span class="text-xs">✂</span>
+          </button>
+        </div>
+      </nav>
+
+      <!-- COLLAPSIBLE TOOL WINDOW (240px) -->
+      <aside 
+        v-if="leftTab !== null" 
+        class="w-60 border-r border-white/[0.08] bg-[#0c0e15] flex flex-col shrink-0 overflow-hidden"
+      >
+        <!-- Tool Window Header -->
+        <div class="h-8 px-3 border-b border-white/[0.06] bg-[#090b10] flex items-center justify-between text-xs font-mono text-silver-400">
+          <span class="uppercase font-semibold tracking-wider text-[11px] text-silver-200">
+            {{ leftTab === 'project' ? 'Project' : leftTab === 'palette' ? 'Java AST Blocks' : 'Inspection' }}
+          </span>
+          <button @click="leftTab = null" class="text-silver-500 hover:text-white text-xs">✕</button>
+        </div>
+
+        <!-- Tool Window Content: Project Tree -->
+        <div v-if="leftTab === 'project'" class="flex-1 overflow-y-auto p-2 font-mono text-xs space-y-0.5">
+          <div class="px-2 py-1 text-[10px] text-silver-500 uppercase tracking-widest font-bold">Files</div>
+          
+          <div 
+            @click="activeFile = 'Main.java'"
+            class="flex items-center gap-2 px-2 py-1.5 rounded cursor-pointer transition-colors"
+            :class="activeFile === 'Main.java' ? 'bg-[#1b202e] text-white font-medium' : 'text-silver-400 hover:bg-white/[0.04] hover:text-silver-200'"
+          >
+            <span class="text-silver-400 text-xs">☕</span>
+            <span class="truncate">Main.java</span>
+            <span class="ml-auto text-[10px] text-silver-600">{{ parseResult.totalLines }}L</span>
+          </div>
+
+          <div 
+            v-for="(_, filename) in DECOMPOSED_FILES" 
+            :key="filename"
+            @click="selectDecomposedFile(filename)"
+            class="flex items-center gap-2 px-2 py-1.5 rounded cursor-pointer transition-colors"
+            :class="activeFile === filename ? 'bg-[#1b202e] text-white font-medium' : 'text-silver-400 hover:bg-white/[0.04] hover:text-silver-200'"
+          >
+            <span class="text-silver-500 text-xs">📄</span>
+            <span class="truncate">{{ filename }}</span>
+          </div>
+
+          <!-- Monolith Decomposition Quick Action -->
+          <div class="pt-4 px-1">
+            <button 
+              @click="splitMonolith"
+              class="w-full h-7 rounded bg-[#141722] hover:bg-[#1a1f2e] border border-white/10 text-[11px] text-silver-300 hover:text-white flex items-center justify-center gap-1.5 transition-all"
+            >
+              <span>✂ Декомпозиция</span>
+            </button>
+          </div>
+        </div>
+
+        <!-- Tool Window Content: Palette of Blocks -->
+        <div v-else-if="leftTab === 'palette'" class="flex-1 overflow-y-auto p-2 space-y-1.5">
+          <div class="px-2 py-1 text-[10px] font-mono text-silver-500 uppercase tracking-widest font-bold">Вставка узла</div>
+          <button
+            v-for="block in paletteBlocks"
+            :key="block.type"
+            @click="insertBlockToCode(block.template)"
+            class="w-full text-left p-2 rounded bg-[#10131c] hover:bg-[#161a26] border border-white/[0.08] hover:border-white/20 transition-all flex items-center gap-2 text-xs group"
+          >
+            <span class="w-5 h-5 rounded bg-[#1a1e2b] border border-white/10 flex items-center justify-center font-mono text-[10px] text-silver-200">
+              {{ block.icon }}
+            </span>
+            <div class="flex-1 truncate">
+              <div class="text-silver-200 font-medium group-hover:text-white truncate">{{ block.name }}</div>
+              <div class="text-[9px] text-silver-500 font-mono truncate">{{ block.sub }}</div>
+            </div>
+            <span class="text-silver-600 group-hover:text-white text-xs">+</span>
+          </button>
+        </div>
+
+        <!-- Tool Window Content: Inspection & Big O -->
+        <div v-else-if="leftTab === 'analysis'" class="flex-1 overflow-y-auto p-3 space-y-4">
+          <!-- Big O Box -->
+          <div class="p-3 rounded bg-[#10131c] border border-white/10 space-y-1">
+            <div class="text-[10px] font-mono text-silver-500 uppercase tracking-wider">Complexity</div>
+            <div class="text-xl font-bold font-mono" :class="isOptimized ? 'text-[#a4c0ac]' : 'text-silver-100'">
+              {{ parseResult.overallBigO }}
+            </div>
+            <div class="text-[11px] text-silver-400">
+              {{ isOptimized ? 'Линейный O(n) с HashMap' : 'Обнаружен вложенный цикл O(n²)' }}
+            </div>
+          </div>
+
+          <!-- Problem Items -->
+          <div class="space-y-2">
+            <div class="text-[10px] font-mono text-silver-500 uppercase tracking-wider">Problems ({{ isOptimized ? 0 : parseResult.problems.length }})</div>
+            <div v-if="!isOptimized && parseResult.problems.length > 0" class="space-y-2">
+              <div 
+                v-for="prob in parseResult.problems" 
+                :key="prob.id"
+                @click="jumpToLine(prob.line)"
+                class="p-2.5 rounded bg-[#16130e] border border-[#b8a994]/30 text-xs space-y-1 cursor-pointer hover:border-[#b8a994]/60"
+              >
+                <div class="flex items-center justify-between font-semibold text-[#e8ded1]">
+                  <span>{{ prob.title }}</span>
+                  <span class="text-[9px] font-mono">:{{ prob.line }}</span>
+                </div>
+                <div class="text-silver-400 text-[10px]">{{ prob.description }}</div>
+              </div>
+            </div>
+            <div v-else class="p-3 rounded bg-[#101712] border border-[#85a38f]/30 text-xs text-[#a4c0ac]">
+              ✓ Все дефекты устранены
+            </div>
+          </div>
+        </div>
+      </aside>
+
+      <!-- CENTER: Graph Canvas + Bottom Tool Window -->
+      <main class="flex-1 flex flex-col min-w-0 bg-[#06070a]">
+        
+        <!-- Top Half: Control Flow Graph (Interactive Canvas) -->
+        <div class="flex-1 relative border-b border-white/[0.08] bg-graphite-dots min-h-[300px]">
+          <!-- Graph Breadcrumbs Bar -->
+          <div class="absolute top-2.5 left-3 z-10 flex items-center gap-2 px-3 py-1 rounded bg-[#0d1017]/95 border border-white/12 text-xs font-mono text-silver-300 shadow-[0_2px_8px_rgba(0,0,0,0.5)]">
+            <span class="text-white font-semibold">{{ activeMethodName }}()</span>
+            <span class="text-silver-600">•</span>
+            <span>{{ graphElements.length }} blocks</span>
+            <span class="text-silver-600">•</span>
+            <span :class="isOptimized ? 'text-[#a4c0ac]' : 'text-[#cfc4b4]'">{{ parseResult.overallBigO }}</span>
+          </div>
+
+          <!-- Vue Flow Component with JetBrains Technical Nodes -->
+          <VueFlow 
+            v-model="graphElements"
+            :fit-view-on-init="true"
+            class="w-full h-full"
+          >
+            <Background :gap="20" color="rgba(255, 255, 255, 0.035)" />
+
+            <template #node-chrome="props">
+              <ChromeNode 
+                :id="props.id" 
+                :data="{
+                  ...props.data,
+                  isSelected: selectedNodeId === props.id
+                }"
+                @node-click="handleNodeClick(props.id, props.data.line)"
+              />
+            </template>
+          </VueFlow>
+
+          <!-- Graph Quick Controls in Corner -->
+          <div class="absolute bottom-2.5 right-3 flex items-center gap-1 p-1 rounded bg-[#0d1017]/90 border border-white/10 text-xs text-silver-400">
+            <button @click="updateGraphFromAst" class="jb-icon-btn !w-6 !h-6" title="Обновить схему">↻</button>
+            <span class="text-[10px] font-mono px-1.5 text-silver-500">Zoom / Pan</span>
+          </div>
+        </div>
+
+        <!-- Bottom Half: JetBrains Editor & Tool Windows (Tabs + Console) -->
+        <div class="h-64 border-t border-white/[0.08] flex flex-col bg-[#08090d] shrink-0">
+          
+          <!-- JetBrains Rectangular Tab Bar -->
+          <div class="h-8 border-b border-white/[0.08] bg-[#0c0e15] flex items-center justify-between shrink-0">
+            <div class="flex items-center h-full">
+              <button 
+                @click="bottomTab = 'code'"
+                class="jb-tab"
+                :class="{ active: bottomTab === 'code' }"
+              >
+                <span>☕ {{ activeFile }}</span>
+              </button>
+
+              <button 
+                @click="bottomTab = 'tests'"
+                class="jb-tab flex items-center gap-1.5"
+                :class="{ active: bottomTab === 'tests' }"
+              >
+                <span class="text-[10px]">▶</span>
+                <span>4: Run / Tests</span>
+                <span class="w-1.5 h-1.5 rounded-full" :class="testsPassed ? 'bg-[#8ea896]' : 'bg-silver-600'"></span>
+              </button>
+
+              <button 
+                @click="bottomTab = 'console'"
+                class="jb-tab"
+                :class="{ active: bottomTab === 'console' }"
+              >
+                <span>Terminal</span>
+              </button>
+            </div>
+
+            <!-- Tab Bar Right Utilities -->
+            <div class="px-3 text-[11px] font-mono text-silver-500 flex items-center gap-3">
+              <span>Java 17</span>
+              <span>UTF-8</span>
+            </div>
+          </div>
+
+          <!-- Tab Content 1: Code Editor (JetBrains Monospace Textarea) -->
+          <div v-show="bottomTab === 'code'" class="flex-1 overflow-auto p-3 font-mono text-xs leading-relaxed bg-[#050608]">
+            <textarea
+              v-model="activeCode"
+              @input="onCodeInput"
+              spellcheck="false"
+              class="w-full h-full bg-transparent text-silver-200 resize-none outline-none font-mono text-xs leading-relaxed selection:bg-white/20"
+            ></textarea>
+          </div>
+
+          <!-- Tab Content 2: JetBrains JUnit Test Results Tree -->
+          <div v-show="bottomTab === 'tests'" class="flex-1 overflow-hidden flex bg-[#06080c]">
+            <!-- Test Tree (Left side: 220px) -->
+            <div class="w-56 border-r border-white/[0.06] bg-[#080a0f] p-2 overflow-y-auto font-mono text-xs space-y-1">
+              <div class="flex items-center justify-between px-2 py-1 text-[10px] text-silver-500 uppercase tracking-widest font-bold">
+                <span>Test Suite</span>
+                <span class="text-[#a4c0ac]">4/4 PASS</span>
+              </div>
+              <div 
+                v-for="t in REAL_TEST_CASES" 
+                :key="t.id"
+                @click="selectedTest = t"
+                class="px-2 py-1 rounded cursor-pointer flex items-center gap-2 transition-colors"
+                :class="selectedTest?.id === t.id ? 'bg-[#1b202e] text-white font-medium' : 'text-silver-400 hover:bg-white/[0.04]'"
+              >
+                <span class="text-[#8ea896] text-[10px]">✓</span>
+                <span class="truncate">{{ t.name }}</span>
+              </div>
+            </div>
+
+            <!-- Test Detail Output (Right side) -->
+            <div class="flex-1 p-3 overflow-y-auto font-mono text-xs text-silver-300 space-y-2">
+              <div class="flex items-center justify-between pb-2 border-b border-white/[0.06] text-[11px] text-silver-400">
+                <span>Test: <strong class="text-white">{{ selectedTest?.name || 'testEmptyInput' }}</strong></span>
+                <span class="text-[#a4c0ac] font-bold">Result: EQUAL (0 diffs)</span>
+              </div>
+              <div>
+                <span class="text-silver-500 text-[10px]">STDIN:</span>
+                <div class="p-2 rounded bg-black/40 border border-white/[0.04] text-silver-300 mt-1">
+                  {{ selectedTest?.input || 'END\n' }}
+                </div>
+              </div>
+              <div>
+                <span class="text-silver-500 text-[10px]">STDOUT (Validated byte-for-byte):</span>
+                <div class="p-2 rounded bg-black/40 border border-white/[0.04] text-[#b8d4c1] mt-1 whitespace-pre-wrap">
+                  {{ selectedTest?.expectedOutput || 'Статус: Обработка завершена\nУникальных записей: 0\n' }}
+                </div>
+              </div>
+            </div>
+          </div>
+
+          <!-- Tab Content 3: Terminal Console -->
+          <div v-show="bottomTab === 'console'" class="flex-1 overflow-auto p-3 font-mono text-xs bg-[#050608] text-silver-400 space-y-1">
+            <div v-for="(log, i) in consoleLogs" :key="i" :class="log.color">
+              {{ log.text }}
+            </div>
+          </div>
+        </div>
+
+      </main>
+
+    </div>
+
+    <!-- 3. JETBRAINS BOTTOM STATUS BAR (24px) -->
+    <footer class="h-6 border-t border-white/[0.08] bg-[#0c0e15] px-3 flex items-center justify-between text-[11px] font-mono text-silver-500 shrink-0 select-none">
+      <!-- Left side: Git branch & status -->
+      <div class="flex items-center gap-3">
+        <span class="flex items-center gap-1.5 text-silver-400">
+          <span class="text-[10px]">⎇</span>
+          <span>main</span>
+        </span>
+        <span class="text-white/10">|</span>
+        <span class="text-silver-400 flex items-center gap-1">
+          <span class="w-1.5 h-1.5 rounded-full" :class="testsPassed ? 'bg-[#8ea896]' : 'bg-silver-600'"></span>
+          <span>Quality Gate: {{ testsPassed ? 'Verified' : 'Pending' }}</span>
+        </span>
+      </div>
+
+      <!-- Right side: Encoding, Position, Memory -->
+      <div class="flex items-center gap-4 text-silver-400">
+        <span>Ln 48, Col 12</span>
+        <span>4 spaces</span>
+        <span>UTF-8</span>
+        <span>OpenJDK 17</span>
+        <span class="text-silver-500">412M / 2048M</span>
+      </div>
+    </footer>
+
+  </div>
+</template>
+
+<script setup lang="ts">
+import { ref, computed, onMounted } from 'vue'
+import { VueFlow } from '@vue-flow/core'
+import { Background } from '@vue-flow/background'
