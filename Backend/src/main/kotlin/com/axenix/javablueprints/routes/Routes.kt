@@ -6,10 +6,12 @@ import com.axenix.javablueprints.repository.ProjectRepository
 import com.axenix.javablueprints.service.*
 import io.ktor.http.*
 import io.ktor.server.application.*
+import io.ktor.server.http.content.*
 import io.ktor.server.request.*
 import io.ktor.server.response.*
 import io.ktor.server.routing.*
 import java.io.ByteArrayOutputStream
+import java.io.File
 import java.util.zip.ZipEntry
 import java.util.zip.ZipOutputStream
 
@@ -20,6 +22,7 @@ fun Application.configureRoutes() {
     val mutator = GraphMutatorService()
     val verifier = VerificationService()
     val geminiService = GeminiService(astParser, analyzer, verifier)
+    val terminalService = WslTerminalService()
     
     routing {
         get("/api/health") {
@@ -58,41 +61,6 @@ fun Application.configureRoutes() {
                 call.respond(
                     HttpStatusCode.BadRequest,
                     ErrorResponse("Failed to load project", e.message ?: "Unknown error")
-                )
-            }
-        }
-
-        post("/api/project/load-demo") {
-            try {
-                val content = object {}.javaClass.getResourceAsStream("/demo.java")?.bufferedReader(Charsets.UTF_8)?.use { it.readText() }
-                    ?: java.io.File("../adskiy-dro__--java--ilnya.java").takeIf { it.exists() }?.readText(Charsets.UTF_8)
-                    ?: java.io.File("adskiy-dro__--java--ilnya.java").takeIf { it.exists() }?.readText(Charsets.UTF_8)
-                    ?: java.io.File("c:/Users/gg/Desktop/adskiy-dro__--java--ilnya.java").takeIf { it.exists() }?.readText(Charsets.UTF_8)
-                    ?: """
-                    package com.enterprise.demo;
-                    public class EnterpriseUniversalCoreSystemEngineFinalManager {
-                        public static void main(String[] args) {
-                            System.out.println("Enterprise Core Demo Loaded");
-                        }
-                    }
-                    """.trimIndent()
-                val mainFile = "EnterpriseUniversalCoreSystemEngineFinalManager.java"
-                val files = mapOf(mainFile to content)
-                ProjectRepository.createProject("default", files, mainFile)
-                val cu = astParser.parseJavaFile(mainFile, content)
-                ProjectRepository.updateCompilationUnit("default", mainFile, cu)
-                val graph = astParser.buildBlueprintGraph(cu, mainFile)
-                val analysis = analyzer.analyzeCode(cu, mainFile)
-                call.respond(ProjectWorkspaceResponse(
-                    project = ProjectState(files, mainFile),
-                    graph = graph,
-                    analysis = analysis
-                ))
-            } catch (e: Exception) {
-                e.printStackTrace()
-                call.respond(
-                    HttpStatusCode.InternalServerError,
-                    ErrorResponse("Failed to load demo project", e.message ?: "Unknown error")
                 )
             }
         }
@@ -256,6 +224,19 @@ fun Application.configureRoutes() {
             }
         }
 
+        post("/api/project/analyze-ai") {
+            try {
+                val report = geminiService.analyzeProjectWithAi()
+                call.respond(report)
+            } catch (e: Exception) {
+                e.printStackTrace()
+                call.respond(
+                    HttpStatusCode.InternalServerError,
+                    ErrorResponse("Ошибка 500: Не удалось подключиться к нейросети Gemini", e.message ?: "Сервис временно недоступен или превышена квота.")
+                )
+            }
+        }
+
         post("/api/project/optimize-ai") {
             try {
                 val result = geminiService.optimizeProjectWithAi()
@@ -264,7 +245,20 @@ fun Application.configureRoutes() {
                 e.printStackTrace()
                 call.respond(
                     HttpStatusCode.InternalServerError,
-                    ErrorResponse("Failed to optimize project with AI", e.message ?: "Unknown error")
+                    ErrorResponse("Ошибка 500: Не удалось подключиться к нейросети Gemini", e.message ?: "Сервис временно недоступен. Вы можете использовать локальную оптимизацию через AST.")
+                )
+            }
+        }
+
+        post("/api/project/decompose-ai") {
+            try {
+                val result = geminiService.decomposeProjectWithAi()
+                call.respond(result)
+            } catch (e: Exception) {
+                e.printStackTrace()
+                call.respond(
+                    HttpStatusCode.InternalServerError,
+                    ErrorResponse("Ошибка 500: Не удалось подключиться к нейросети Gemini для декомпозиции", e.message ?: "Сервис временно недоступен. Вы можете использовать локальную декомпозицию.")
                 )
             }
         }
@@ -395,6 +389,34 @@ fun Application.configureRoutes() {
                     ErrorResponse("Failed to verify project", e.message ?: "Unknown error")
                 )
             }
+        }
+
+        post("/api/terminal/exec") {
+            try {
+                val request = call.receive<TerminalExecRequest>()
+                val result = terminalService.execute(request.command, request.cwd)
+                call.respond(result)
+            } catch (e: Exception) {
+                call.respond(
+                    HttpStatusCode.InternalServerError,
+                    ErrorResponse("Failed to execute terminal command", e.message ?: "Unknown error")
+                )
+            }
+        }
+
+        val frontendDir = listOf(
+            File("frontend/dist"),
+            File("../frontend/dist"),
+            File("static"),
+            File("dist")
+        ).firstOrNull { it.exists() && it.isDirectory }
+
+        if (frontendDir != null) {
+            staticFiles("/", frontendDir) {
+                default("index.html")
+            }
+        } else {
+            staticResources("/", "static", index = "index.html")
         }
     }
 }

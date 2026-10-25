@@ -412,6 +412,74 @@
     box-shadow: none !important;
   }
 
+  /* Silver Segmented Pill for Modules & Fix */
+  .jb-pill-silver {
+    display: inline-flex;
+    align-items: center;
+    height: 28px;
+    border-radius: 8px;
+    background: linear-gradient(145deg, #ffffff 0%, #e2e8f0 45%, #94a3b8 100%) !important;
+    border: 1px solid rgba(255, 255, 255, 0.75) !important;
+    box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.9), 0 2px 6px rgba(0, 0, 0, 0.35) !important;
+    overflow: hidden;
+    user-select: none;
+    flex-shrink: 0;
+  }
+
+  .jb-pill-silver .pill-label {
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 10px;
+    font-weight: 800;
+    color: #000000;
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
+    padding: 0 8px;
+    border-right: 1px solid rgba(0, 0, 0, 0.15);
+    height: 100%;
+    display: flex;
+    align-items: center;
+    background: rgba(0, 0, 0, 0.04);
+  }
+
+  .jb-pill-silver .pill-btn {
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 11px;
+    font-weight: 700;
+    color: #000000;
+    padding: 0 8px;
+    height: 100%;
+    display: flex;
+    align-items: center;
+    gap: 4px;
+    cursor: pointer;
+    background: transparent;
+    border: 0;
+    transition: all 0.15s ease;
+  }
+
+  .jb-pill-silver .pill-btn:hover:not(:disabled) {
+    background: rgba(0, 0, 0, 0.1);
+  }
+
+  .jb-pill-silver .pill-btn:active:not(:disabled) {
+    background: rgba(0, 0, 0, 0.18);
+  }
+
+  .jb-pill-silver .pill-btn + .pill-btn {
+    border-left: 1px solid rgba(0, 0, 0, 0.15);
+  }
+
+  .jb-pill-silver .pill-btn:disabled {
+    opacity: 0.35;
+    cursor: not-allowed;
+  }
+
+  .jb-pill-silver svg {
+    color: #000000 !important;
+    stroke: #000000 !important;
+    stroke-width: 2.2px !important;
+  }
+
   /* Icon Button */
   .jb-icon-btn {
     @apply w-7 h-7 rounded flex items-center justify-center;
@@ -532,13 +600,12 @@
   height: 7px;
 }
 
-/* Smooth transitions for Vue Flow graph nodes during layout updates */
+/* Vue Flow graph node performance */
 .vue-flow__node {
-  transition: transform 0.3s cubic-bezier(0.25, 1, 0.5, 1), opacity 0.25s ease;
-  will-change: transform, opacity;
+  will-change: auto;
 }
 
-/* Method ladder pill button */
+/* Method ladder pill button (Черно-белый стиль) */
 .node-ladder-btn {
   display: inline-flex;
   align-items: center;
@@ -548,9 +615,9 @@
   font-weight: 600;
   font-family: 'JetBrains Mono', monospace;
   border-radius: 4px;
-  background: rgba(164, 192, 172, 0.16);
-  border: 1px solid rgba(164, 192, 172, 0.38);
-  color: #a4c0ac;
+  background: rgba(255, 255, 255, 0.08);
+  border: 1px solid rgba(255, 255, 255, 0.24);
+  color: #e2e8f0;
   cursor: pointer;
   transition: background 0.15s ease, border-color 0.15s ease, color 0.15s ease;
   user-select: none;
@@ -558,20 +625,20 @@
 }
 
 .node-ladder-btn:hover {
-  background: rgba(164, 192, 172, 0.3);
-  border-color: rgba(164, 192, 172, 0.65);
-  color: #d1fae5;
+  background: rgba(255, 255, 255, 0.18);
+  border-color: rgba(255, 255, 255, 0.55);
+  color: #ffffff;
 }
 
 .node-ladder-btn.is-open {
-  background: rgba(148, 163, 184, 0.16);
-  border-color: rgba(148, 163, 184, 0.35);
-  color: #cbd5e1;
+  background: rgba(255, 255, 255, 0.14);
+  border-color: rgba(255, 255, 255, 0.35);
+  color: #ffffff;
 }
 
 .node-ladder-btn.is-open:hover {
-  background: rgba(148, 163, 184, 0.28);
-  color: #f1f5f9;
+  background: rgba(255, 255, 255, 0.25);
+  color: #ffffff;
 }
 
 /* Unreal Engine style method tabs bar */
@@ -635,7 +702,7 @@
   color: #f87171;
 }
 
-/* Method card in overview */
+/* Method card in overview (Черно-белый стиль) */
 .node-overview-badge {
   display: inline-flex;
   align-items: center;
@@ -645,17 +712,17 @@
   font-family: 'JetBrains Mono', monospace;
   font-weight: 600;
   border-radius: 4px;
-  background: rgba(164, 192, 172, 0.14);
-  border: 1px solid rgba(164, 192, 172, 0.32);
-  color: #a4c0ac;
+  background: rgba(255, 255, 255, 0.08);
+  border: 1px solid rgba(255, 255, 255, 0.24);
+  color: #e2e8f0;
   cursor: pointer;
   transition: all 0.15s ease;
 }
 
 .node-overview-badge:hover {
-  background: rgba(164, 192, 172, 0.26);
-  border-color: rgba(164, 192, 172, 0.6);
-  color: #d1fae5;
+  background: rgba(255, 255, 255, 0.18);
+  border-color: rgba(255, 255, 255, 0.55);
+  color: #ffffff;
 }
 
 .toolbar-inspection { font: 10px 'JetBrains Mono', monospace; white-space: nowrap; }
@@ -667,16 +734,17 @@
 .ide-toolbar {
   position: relative;
   z-index: 100;
-  height: 40px; min-height: 40px; display: flex; align-items: center; gap: 12px;
-  padding: 0 10px; border: 0; border-bottom: 1px solid rgba(255,255,255,.14);
+  height: 40px; min-height: 40px; display: flex; align-items: center; gap: 10px;
+  padding: 0 12px; border: 0; border-bottom: 1px solid rgba(255,255,255,.14);
   border-radius: 0; background: linear-gradient(180deg, #171b23, #0c0e14);
   box-shadow: 0 2px 10px rgba(0,0,0,.32); flex-shrink: 0;
 }
-.toolbar-brand, .toolbar-actions { display: flex; align-items: center; min-width: 0; gap: 8px; }
-.toolbar-title { min-width: 0; display: flex; align-items: baseline; gap: 10px; }
+.toolbar-brand { display: flex; align-items: center; min-width: 0; gap: 8px; flex-shrink: 0; }
+.toolbar-actions { display: flex; align-items: center; min-width: 0; gap: 8px; margin-left: auto; flex-shrink: 0; }
+.toolbar-title { min-width: 0; display: flex; align-items: baseline; gap: 8px; }
 .toolbar-title strong { color: #f1f3f6; font-size: 12px; letter-spacing: .02em; white-space: nowrap; }
-.toolbar-breadcrumb { color: #7f8794; font: 10px 'JetBrains Mono', monospace; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.toolbar-run-widget { display: flex; align-items: stretch; height: 27px; margin: 0 auto; border: 1px solid rgba(255,255,255,.16); border-radius: 4px; overflow: hidden; background: #11151c; }
+.toolbar-breadcrumb { color: #7f8794; font: 10px 'JetBrains Mono', monospace; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; max-width: 240px; }
+.toolbar-run-widget { display: flex; align-items: stretch; height: 27px; margin: 0; border: 1px solid rgba(255,255,255,.16); border-radius: 4px; overflow: hidden; background: #11151c; flex-shrink: 0; }
 .run-config, .run-action { display: inline-flex; align-items: center; gap: 6px; padding: 0 10px; color: #d8dce4; font: 11px 'JetBrains Mono', monospace; white-space: nowrap; }
 .run-config { border-right: 1px solid rgba(255,255,255,.12); }
 .run-action { border: 0; background: transparent; cursor: pointer; }
@@ -859,7 +927,7 @@
 .reference-shell aside { border: 1px solid rgba(255,255,255,.09); border-radius: 14px; overflow: hidden; }
 .workspace-main { gap: 8px; }
 .graph-panel, .bottom-panel { border: 1px solid rgba(255,255,255,.10); border-radius: 16px; }
-.graph-toolbar { display: flex; align-items: center; justify-content: space-between; flex-wrap: wrap; gap: 12px; padding: 10px 14px; flex-shrink: 0; background: #0c0e14; border-bottom: 1px solid rgba(255,255,255,.08); }
+.graph-toolbar { display: flex; align-items: center; justify-content: space-between; gap: 10px; padding: 6px 12px; min-height: 38px; flex-shrink: 0; background: #0c0e14; border-bottom: 1px solid rgba(255,255,255,.08); }
 .graph-actions { display: flex; align-items: center; gap: 8px; }
 .reference-shell .jb-icon-btn, .reference-shell .jb-btn-secondary, .reference-shell .jb-stripe-btn, .reference-shell .rounded { border-radius: 10px; }
 .reference-shell .jb-tab { border-radius: 9px 9px 0 0; white-space: nowrap; }
@@ -873,7 +941,7 @@
   .reference-shell { padding: 0; gap: 0; }
   .reference-shell > .flex-1 { padding: 4px; gap: 4px; }
   .graph-toolbar { padding: 8px; gap: 8px; }
-  .reference-shell aside.w-60 { width: 170px; }
+  .reference-shell aside.w-80 { width: 170px; }
 }
 .compact-header { height: 48px; flex-shrink: 0; display: flex; align-items: center; gap: 12px; padding: 0 12px; border: 1px solid rgba(255,255,255,.10); border-radius: 14px; background: #0c0e14; }
 .brand-mark { width: 30px; height: 30px; display: grid; place-items: center; border-radius: 9px; color: #000000; background: linear-gradient(145deg, #ffffff 0%, #e2e8f0 40%, #94a3b8 100%); font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; font-style: normal; font-weight: 900; font-size: 16px; line-height: 1; box-shadow: inset 0 1px 0 rgba(255,255,255,.9), 0 2px 10px rgba(0,0,0,.35); border: 1px solid rgba(255, 255, 255, 0.5); }
@@ -909,7 +977,6 @@
 
 .jb-minimap .vue-flow__minimap-node {
   cursor: pointer;
-  transition: fill 0.15s ease, stroke 0.15s ease, filter 0.15s ease;
 }
 
 .jb-minimap .vue-flow__minimap-node:hover {

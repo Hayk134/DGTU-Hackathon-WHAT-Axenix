@@ -47,11 +47,11 @@ class StaticAnalyzerService {
             if (complexity > 8) {
                 defects.add(Defect(
                     id = "high_complexity_${method.nameAsString}",
-                    type = DefectType.NESTED_COMPLEXITY,
+                    type = DefectType.HIDDEN_COMPLEXITY,
                     severity = Severity.HIGH,
                     location = extractLocation(method, filePath),
                     title = "Высокая цикломатическая сложность: ${method.nameAsString}",
-                    description = "Цикломатическая сложность метода: $complexity (порог: 8). Метод трудно тестировать и поддерживать.",
+                    description = "Цикломатическая сложность метода: $complexity (порог: 8). Рекомендуется декомпозировать условия и применить Guard Clauses.",
                     complexity = "O($complexity)",
                     codeFragment = method.declarationAsString
                 ))
@@ -88,16 +88,44 @@ class StaticAnalyzerService {
         val nestedLoopVisitor = object : VoidVisitorAdapter<Int>() {
             override fun visit(n: ForStmt, depth: Int) {
                 if (depth >= 1) {
-                    defects.add(Defect(
-                        id = "nested_loop_${method.nameAsString}_${n.hashCode()}",
-                        type = DefectType.NESTED_COMPLEXITY,
-                        severity = Severity.HIGH,
-                        location = extractLocation(n, filePath),
-                        title = "Вложенный цикл O(n²) в ${method.nameAsString}",
-                        description = "Обнаружен вложенный цикл глубины ${depth + 1}. Сложность: O(n^${depth + 1}). Может привести к значительному замедлению на больших данных.",
-                        complexity = "O(n^${depth + 1})",
-                        codeFragment = n.toString().take(150)
-                    ))
+                    val code = n.toString()
+                    val isSorting = code.contains("swap") || code.contains("tmp") || code.contains("temp") ||
+                            code.contains("compareTo") || Regex("""\w+\[.*?\]\s*[><]\s*\w+\[.*?\]""").containsMatchIn(code)
+                    val isDuplicateCheck = (code.contains("==") || code.contains(".equals(")) &&
+                            (code.contains("return true") || code.contains("return false") || code.contains("break"))
+
+                    when {
+                        isSorting -> defects.add(Defect(
+                            id = "quadratic_sort_${method.nameAsString}_${n.hashCode()}",
+                            type = DefectType.NESTED_COMPLEXITY,
+                            severity = Severity.HIGH,
+                            location = extractLocation(n, filePath),
+                            title = "Квадратичная сортировка O(n²) в ${method.nameAsString}",
+                            description = "Обнаружена квадратичная сортировка. Рекомендуется использовать Arrays.sort() или Collections.sort() с гарантией O(n log n).",
+                            complexity = "O(n²)",
+                            codeFragment = n.toString().take(150)
+                        ))
+                        isDuplicateCheck -> defects.add(Defect(
+                            id = "duplicate_search_${method.nameAsString}_${n.hashCode()}",
+                            type = DefectType.NESTED_COMPLEXITY,
+                            severity = Severity.HIGH,
+                            location = extractLocation(n, filePath),
+                            title = "Квадратичный поиск дубликатов в ${method.nameAsString}",
+                            description = "Вложенный цикл проверки совпадений. Рекомендуется однопроходный поиск через HashSet.add() за O(n).",
+                            complexity = "O(n²)",
+                            codeFragment = n.toString().take(150)
+                        ))
+                        else -> defects.add(Defect(
+                            id = "nested_loop_${method.nameAsString}_${n.hashCode()}",
+                            type = DefectType.NESTED_COMPLEXITY,
+                            severity = Severity.HIGH,
+                            location = extractLocation(n, filePath),
+                            title = "Вложенный цикл O(n²) в ${method.nameAsString}",
+                            description = "Обнаружен вложенный цикл глубины ${depth + 1}. Рекомендуется использовать HashMap/HashSet для индексации за O(1).",
+                            complexity = "O(n^${depth + 1})",
+                            codeFragment = n.toString().take(150)
+                        ))
+                    }
                 }
                 super.visit(n, depth + 1)
             }
@@ -164,28 +192,62 @@ class StaticAnalyzerService {
             private fun checkLoopBody(body: Statement, loopStmt: Statement) {
                 body.findAll(MethodCallExpr::class.java).forEach { call ->
                     if (call.nameAsString in inefficientOperations) {
-                        defects.add(Defect(
-                            id = "inefficient_op_${method.nameAsString}_${call.hashCode()}",
-                            type = DefectType.INEFFICIENT_LOOP,
-                            severity = Severity.MEDIUM,
-                            location = extractLocation(call, filePath),
-                            title = "Неэффективная операция ${call.nameAsString} в цикле",
-                            description = "Операция ${call.nameAsString}() имеет сложность O(n) и вызывается внутри цикла. Итоговая сложность O(n²). Используйте HashSet для ускорения.",
-                            complexity = "O(n²)",
-                            codeFragment = call.toString()
-                        ))
+                        val scopeStr = call.scope.map { it.toString().trim() }.orElse("")
+                        
+                        // Check if the target is a String or Set/Map to avoid false positives
+                        val isStringTarget = method.findAll(com.github.javaparser.ast.body.VariableDeclarator::class.java).any { v ->
+                            v.nameAsString == scopeStr && v.typeAsString.contains("String")
+                        } || method.parameters.any { p ->
+                            p.nameAsString == scopeStr && p.typeAsString.contains("String")
+                        } || (call.nameAsString == "contains" && call.arguments.any { it is com.github.javaparser.ast.expr.StringLiteralExpr })
+                        
+                        val isSetOrMapTarget = method.findAll(com.github.javaparser.ast.body.VariableDeclarator::class.java).any { v ->
+                            v.nameAsString == scopeStr && (v.typeAsString.contains("Set") || v.typeAsString.contains("Map"))
+                        } || method.parameters.any { p ->
+                            p.nameAsString == scopeStr && (p.typeAsString.contains("Set") || p.typeAsString.contains("Map"))
+                        }
+
+                        if (!isStringTarget && !isSetOrMapTarget) {
+                            defects.add(Defect(
+                                id = "inefficient_op_${method.nameAsString}_${call.hashCode()}",
+                                type = DefectType.INEFFICIENT_LOOP,
+                                severity = Severity.MEDIUM,
+                                location = extractLocation(call, filePath),
+                                title = "Неэффективная операция ${call.nameAsString} в цикле",
+                                description = "Операция ${call.nameAsString}() имеет сложность O(n) для списков и вызывается внутри цикла. Итоговая сложность O(n²). Используйте HashSet для ускорения.",
+                                complexity = "O(n²)",
+                                codeFragment = call.toString()
+                            ))
+                        }
                     }
                 }
                 
-                // Detect string concatenation in loops
-                if (body.toString().contains(" += ") && body.toString().contains("\"")) {
+                // Detect string concatenation in loops (+= or var = var + ...)
+                val bodyStr = body.toString()
+                val hasConcatPlus = bodyStr.contains(" += ") || Regex("""\b(\w+)\s*=\s*\1\s*\+""").containsMatchIn(bodyStr)
+                if (hasConcatPlus) {
                     defects.add(Defect(
                         id = "string_concat_${method.nameAsString}_${loopStmt.hashCode()}",
                         type = DefectType.INEFFICIENT_LOOP,
                         severity = Severity.MEDIUM,
                         location = extractLocation(loopStmt, filePath),
-                        title = "Конкатенация строк в цикле",
-                        description = "Обнаружена конкатенация строк с помощью оператора += в цикле. Используйте StringBuilder для оптимизации.",
+                        title = "Конкатенация строк в цикле: ${method.nameAsString}",
+                        description = "Обнаружено накопление строк оператором '+' внутри цикла. Рекомендуется использовать StringBuilder для предотвращения избыточных аллокаций памяти.",
+                        complexity = "O(n²)",
+                        codeFragment = loopStmt.toString().take(100)
+                    ))
+                }
+
+                // Detect manual array clear/fill in loop
+                if (Regex("""\b(\w+)\[.*?\]\s*=\s*(?:0(?:\.0)?|false|null)\s*;""").containsMatchIn(bodyStr)) {
+                    defects.add(Defect(
+                        id = "array_fill_${method.nameAsString}_${loopStmt.hashCode()}",
+                        type = DefectType.INEFFICIENT_LOOP,
+                        severity = Severity.LOW,
+                        location = extractLocation(loopStmt, filePath),
+                        title = "Поэлементная очистка массива в ${method.nameAsString}",
+                        description = "Ручной цикл обнуления/очистки массива. Рекомендуется использовать JVM-интринсик Arrays.fill().",
+                        complexity = "O(n)",
                         codeFragment = loopStmt.toString().take(100)
                     ))
                 }
@@ -293,31 +355,87 @@ class StaticAnalyzerService {
     }
     
     private fun generateRecommendations(defects: List<Defect>): List<Recommendation> {
-        return defects.map { defect ->
-            Recommendation(
-                defectId = defect.id,
-                title = when (defect.type) {
-                    DefectType.NESTED_COMPLEXITY -> "Оптимизация вложенных циклов"
-                    DefectType.LONG_METHOD -> "Декомпозиция метода"
-                    DefectType.DUPLICATED_LOGIC -> "Извлечение общей логики"
-                    DefectType.INEFFICIENT_LOOP -> "Использование эффективных структур данных"
-                    DefectType.HIDDEN_COMPLEXITY -> "Упрощение логики"
-                },
-                description = when (defect.type) {
-                    DefectType.NESTED_COMPLEXITY -> "Замените вложенные циклы на HashMap для индексации элементов по ключу, снизив сложность с O(n²) до O(n)."
-                    DefectType.LONG_METHOD -> "Разбейте метод на несколько небольших методов с четкой ответственностью."
-                    DefectType.DUPLICATED_LOGIC -> "Создайте вспомогательный метод для общей логики и вызывайте его из обоих мест."
-                    DefectType.INEFFICIENT_LOOP -> "Используйте HashSet вместо List для операций поиска, или StringBuilder для конкатенации строк."
-                    DefectType.HIDDEN_COMPLEXITY -> "Упростите условия и извлеките сложные выражения в переменные с понятными именами."
-                },
-                expectedBenefit = when (defect.type) {
-                    DefectType.NESTED_COMPLEXITY -> "Ускорение выполнения в 10-1000 раз на больших объемах данных"
-                    DefectType.LONG_METHOD -> "Повышение читаемости и тестируемости кода"
-                    DefectType.DUPLICATED_LOGIC -> "Снижение объема кода и упрощение сопровождения"
-                    DefectType.INEFFICIENT_LOOP -> "Ускорение выполнения в 10-100 раз"
-                    DefectType.HIDDEN_COMPLEXITY -> "Улучшение понимания и сопровождения кода"
-                }
-            )
+        val result = mutableListOf<Recommendation>()
+        val seenSignatures = mutableSetOf<String>()
+
+        for (defect in defects) {
+            val (title, description, benefit) = when {
+                defect.id.startsWith("quadratic_sort_") -> Triple(
+                    "Замена квадратичной сортировки на O(n log n)",
+                    "Замените ручную сортировку на стандартный алгоритм Arrays.sort() или Collections.sort() (Dual-Pivot Quicksort / TimSort).",
+                    "O(n²) → O(n log n), ускорение до 1000x"
+                )
+                defect.id.startsWith("duplicate_search_") -> Triple(
+                    "Однопроходный поиск дубликатов через HashSet",
+                    "Замените квадратичный перебор пар элементов на однопроходную проверку с использованием Set.add().",
+                    "O(n²) → O(n), устранение вложенного цикла"
+                )
+                defect.id.startsWith("string_concat_") -> Triple(
+                    "Оптимизация конкатенации строк через StringBuilder",
+                    "Замените оператор '+' в цикле на StringBuilder для исключения создания промежуточных String-объектов.",
+                    "Экономия памяти до 95%, снижение нагрузки на GC"
+                )
+                defect.id.startsWith("array_fill_") -> Triple(
+                    "Векторное заполнение массива через Arrays.fill",
+                    "Замените поэлементную очистку массива на векторный интринсик JVM Arrays.fill (аппаратный memset/SIMD).",
+                    "O(n) → O(1) аппаратная инструкция"
+                )
+                defect.id.startsWith("inefficient_op_") -> Triple(
+                    "Замена линейного поиска List.contains() на Set",
+                    "Вызов contains()/indexOf() на списке внутри цикла дает сложность O(n×m). Использование HashSet обеспечивает поиск за O(1).",
+                    "O(n) → O(1) на каждую операцию поиска"
+                )
+                defect.id.startsWith("nested_foreach_") -> Triple(
+                    "Группировка связанных коллекций через HashMap",
+                    "Замените двойной перебор ForEach на группировку элементов по ключу через Map<K, List<V>>.",
+                    "O(n²) → O(n), ускорение на больших объемах данных"
+                )
+                defect.id.startsWith("nested_loop_") || defect.id.startsWith("nested_while_") -> Triple(
+                    "Индексация вложенного поиска через HashSet / HashMap",
+                    "Замените квадратичный перебор на предварительно построенный индекс HashMap/HashSet для сопоставления за O(1).",
+                    "Снижение алгоритмической сложности с O(n²) до O(n)"
+                )
+                defect.type == DefectType.LONG_METHOD -> Triple(
+                    "Декомпозиция метода по Single Responsibility",
+                    "Разбейте объемный метод на короткие сфокусированные функции с единой ответственностью.",
+                    "Повышение читаемости и тестируемости кода"
+                )
+                defect.type == DefectType.HIDDEN_COMPLEXITY -> Triple(
+                    "Снижение цикломатической сложности через Guard Clauses",
+                    "Упростите структуру условий метода, применив ранние возвраты (Guard Clauses) и разбив сложные предикаты.",
+                    "Снижение сложности до < 8, устранение скрытых дефектов"
+                )
+                defect.type == DefectType.DUPLICATED_LOGIC -> Triple(
+                    "Устранение дублирования кода (DRY)",
+                    "Вынесите повторяющиеся фрагменты логики в общий переиспользуемый метод.",
+                    "Сокращение дублирования и единая точка поддержки"
+                )
+                else -> Triple(
+                    "Оптимизация алгоритма и структур данных",
+                    defect.description,
+                    "Повышение производительности и масштабируемости"
+                )
+            }
+
+            val methodNameMatch = Regex("""^(?:nested_loop|quadratic_sort|duplicate_search|string_concat|array_fill|inefficient_op|nested_foreach|nested_while|high_complexity|long_method|duplicated)_([a-zA-Z0-9]+?)(?:_(-?\d+))?$""").find(defect.id)
+            val rawName = methodNameMatch?.groupValues?.get(1)?.trimEnd('_')
+            val methodName = if (!rawName.isNullOrBlank()) rawName else null
+
+            val fullTitle = if (methodName != null) "$title в $methodName" else title
+            val dedupKey = "$title:$methodName"
+
+            if (seenSignatures.add(dedupKey)) {
+                result.add(
+                    Recommendation(
+                        defectId = defect.id,
+                        title = fullTitle,
+                        description = description,
+                        expectedBenefit = benefit
+                    )
+                )
+            }
         }
+
+        return result
     }
 }

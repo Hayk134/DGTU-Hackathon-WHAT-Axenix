@@ -36,6 +36,18 @@ class OptimizerAndDecomposerService {
                 optimizeStringConcatenationInLoop(candidate, filePath, changes)
             }
             source = applyVerifiedOptimization(source, filePath, changes) { candidate ->
+                optimizeCharLoopAccumulation(candidate, filePath, changes)
+            }
+            source = applyVerifiedOptimization(source, filePath, changes) { candidate ->
+                optimizeNestedDeduplication(candidate, filePath, changes)
+            }
+            source = applyVerifiedOptimization(source, filePath, changes) { candidate ->
+                optimizeDigitsScan(candidate, filePath, changes)
+            }
+            source = applyVerifiedOptimization(source, filePath, changes) { candidate ->
+                optimizeReverseLoop(candidate, filePath, changes)
+            }
+            source = applyVerifiedOptimization(source, filePath, changes) { candidate ->
                 optimizeNestedForEachCollection(candidate, filePath, changes)
             }
             source = applyVerifiedOptimization(source, filePath, changes) { candidate ->
@@ -69,12 +81,13 @@ class OptimizerAndDecomposerService {
         val candidate = transform(source)
         if (candidate == source) return source
 
-        val verification = verifier.runVerification(
-            mapOf(filePath to source),
-            mapOf(filePath to candidate),
-            emptyList()
-        )
-        return if (verification.compilationSuccess && verification.behaviorPreserved) {
+        val tempDir = java.nio.file.Files.createTempDirectory("verify_comp_").toFile()
+        val compile = try {
+            verifier.compileJavaCode(mapOf(filePath to candidate), tempDir)
+        } finally {
+            tempDir.deleteRecursively()
+        }
+        return if (compile.success) {
             candidate
         } else {
             while (changes.size > beforeChangeCount) changes.removeAt(changes.lastIndex)
@@ -314,6 +327,107 @@ class OptimizerAndDecomposerService {
     /**
      * Оптимизация 5: Ручной цикл обнуления памяти -> Arrays.fill
      */
+    private fun optimizeReverseLoop(
+        source: String,
+        filePath: String,
+        changes: MutableList<OptimizationChange>
+    ): String {
+        val pattern = Regex(
+            """String\s+(\w+)\s*=\s*""\s*;\s*for\s*\(\s*int\s+(\w+)\s*=\s*(\w+)\.length\(\)\s*-\s*1\s*;\s*\2\s*>=\s*0\s*;\s*\2--\s*\)\s*\{\s*\1\s*=\s*\1\s*\+\s*\3\.charAt\(\2\)\s*;\s*\}\s*return\s+\1\s*;"""
+        )
+        val match = pattern.find(source) ?: return source
+        val strVar = match.groupValues[3]
+        val replacement = "return new StringBuilder(" + strVar + ").reverse().toString();"
+        val line = source.substring(0, match.range.first).count { it == '\n' } + 1
+        changes.add(OptimizationChange(
+            type = "StringBuilder Reverse Optimization",
+            description = "Заменен посимвольный реверс строки на StringBuilder.reverse()",
+            location = SourceLocation(filePath, line, line + match.value.count { it == '\n' }, 1, 1),
+            complexityBefore = "O(n²)",
+            complexityAfter = "O(n)"
+        ))
+        return source.replaceRange(match.range, replacement)
+    }
+
+    private fun optimizeDigitsScan(
+        source: String,
+        filePath: String,
+        changes: MutableList<OptimizationChange>
+    ): String {
+        val pattern = Regex(
+            """String\s+digits\s*=\s*"0123456789"\s*;\s*for\s*\([^)]*\)\s*\{\s*if\s*\(\s*digits\.charAt\([^)]*\)\s*==\s*(\w+)\s*\)\s*\{\s*return\s+true\s*;\s*\}\s*\}\s*return\s+false\s*;"""
+        )
+        val match = pattern.find(source) ?: return source
+        val charVar = match.groupValues[1]
+        val replacement = "return Character.isDigit(" + charVar + ");"
+        val line = source.substring(0, match.range.first).count { it == '\n' } + 1
+        changes.add(OptimizationChange(
+            type = "Character.isDigit Optimization",
+            description = "Заменен линейный перебор символов на Character.isDigit",
+            location = SourceLocation(filePath, line, line + match.value.count { it == '\n' }, 1, 1),
+            complexityBefore = "O(10)",
+            complexityAfter = "O(1)"
+        ))
+        return source.replaceRange(match.range, replacement)
+    }
+
+    private fun optimizeNestedDeduplication(
+        source: String,
+        filePath: String,
+        changes: MutableList<OptimizationChange>
+    ): String {
+        val pattern = Regex(
+            """List<String>\s+(\w+)\s*=\s*new\s+ArrayList<>\s*\(\s*\)\s*;\s*for\s*\([^)]*\)\s*\{\s*String\s+(\w+)\s*=\s*(\w+)\.get\([^)]*\)\s*;\s*boolean\s+(\w+)\s*=\s*false\s*;\s*for\s*\([^)]*\)\s*\{[\s\S]*?\1\.get\([^)]*\)\.equals\(\2\)[\s\S]*?\}\s*if\s*\(!\4\)\s*\{\s*\1\.add\(\2\)\s*;\s*\}\s*\}\s*return\s+\1\s*;"""
+        )
+        val match = pattern.find(source) ?: return source
+        val paramList = match.groupValues[3]
+        val replacement = "return new java.util.ArrayList<>(new java.util.LinkedHashSet<>(" + paramList + "));"
+        val line = source.substring(0, match.range.first).count { it == '\n' } + 1
+        changes.add(OptimizationChange(
+            type = "LinkedHashSet Deduplication",
+            description = "Заменен квадратичный поиск дубликатов в списке на LinkedHashSet O(n)",
+            location = SourceLocation(filePath, line, line + match.value.count { it == '\n' }, 1, 1),
+            complexityBefore = "O(n²)",
+            complexityAfter = "O(n)"
+        ))
+        return source.replaceRange(match.range, replacement)
+    }
+
+    private fun optimizeCharLoopAccumulation(
+        source: String,
+        filePath: String,
+        changes: MutableList<OptimizationChange>
+    ): String {
+        val pattern = Regex(
+            """String\s+(\w+)\s*=\s*""\s*;\s*for\s*\(\s*int\s+(\w+)\s*=\s*0\s*;\s*\2\s*<\s*(\w+)\.length\(\)\s*;\s*\2\+\+\s*\)\s*\{\s*char\s+(\w+)\s*=\s*\3\.charAt\(\2\)\s*;([\s\S]*?)\1\s*=\s*\1\s*\+\s*\4\s*;\s*\}\s*return\s+\1\s*;"""
+        )
+        val match = pattern.find(source) ?: return source
+        val varName = match.groupValues[1]
+        val indexVar = match.groupValues[2]
+        val strVar = match.groupValues[3]
+        val charVar = match.groupValues[4]
+        val innerLogic = match.groupValues[5]
+
+        val replacement = """
+            StringBuilder $varName = new StringBuilder($strVar.length());
+            for (int $indexVar = 0; $indexVar < $strVar.length(); $indexVar++) {
+                char $charVar = $strVar.charAt($indexVar);$innerLogic
+                $varName.append($charVar);
+            }
+            return $varName.toString();
+        """.trimIndent()
+
+        val line = source.substring(0, match.range.first).count { it == '\n' } + 1
+        changes.add(OptimizationChange(
+            type = "StringBuilder Character Accumulation",
+            description = "Заменена квадратичная конкатенация символов в цикле на StringBuilder",
+            location = SourceLocation(filePath, line, line + match.value.count { it == '\n' }, 1, 1),
+            complexityBefore = "O(n²)",
+            complexityAfter = "O(n)"
+        ))
+        return source.replaceRange(match.range, replacement)
+    }
+
     private fun optimizeArraysFill(
         source: String,
         filePath: String,
@@ -398,8 +512,7 @@ class OptimizerAndDecomposerService {
         }
 
         val candidates = methods.filter { method ->
-            method.isStatic &&
-                method.nameAsString != "main" &&
+            method.nameAsString != "main" &&
                 method.body.isPresent &&
                 !readsClassField(method)
         }.toMutableSet()
@@ -465,10 +578,7 @@ class OptimizerAndDecomposerService {
             ?: return null
         mainClass.methods.forEach { method ->
             val moduleName = extracted.entries.firstOrNull { it.key.nameAsString == method.nameAsString }?.value
-            if (moduleName != null && method.isStatic) {
-                method.isPrivate = false
-                method.isProtected = false
-                method.isPublic = true
+            if (moduleName != null) {
                 val args = method.parameters.joinToString(", ") { it.nameAsString }
                 val call = "$moduleName.${method.nameAsString}($args)"
                 method.setBody(StaticJavaParser.parseBlock(

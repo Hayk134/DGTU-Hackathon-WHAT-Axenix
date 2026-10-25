@@ -2,59 +2,155 @@
   <div class="reference-shell h-screen w-screen flex flex-col bg-[#050608] text-silver-brushed overflow-hidden font-sans select-none">
     
     <header class="ide-toolbar" role="banner">
-      <div class="toolbar-brand">
-        <div class="brand-mark" aria-hidden="true"><span>W</span></div>
+      <!-- 1. Left: Brand Title -->
+      <div class="toolbar-brand shrink-0">
         <div class="toolbar-title">
-          <strong>WHAT</strong>
-          <span class="toolbar-breadcrumb">{{ currentFile || currentMainFile || 'workspace / unassigned.java' }}</span>
+          <strong class="font-extrabold tracking-wider text-xs text-white">TECHNOLOGY</strong>
         </div>
       </div>
 
-      <div class="toolbar-run-widget" role="group" aria-label="Выполнение">
-        <button class="run-action !text-[#a3be8c] hover:!text-[#b8d4c0]" :disabled="isProcessing || !projectLoaded" @click="runProjectCode" title="Скомпилировать и запустить код">
-          <Play class="w-3.5 h-3.5 fill-current" />
-          <span>Run</span>
-        </button>
-        <button class="run-action !text-[#88c0d0] font-semibold" :disabled="isProcessing || !projectLoaded" @click="runDecomposition" title="Автоматически декомпозировать монолит на модули">
-          <Boxes class="w-3.5 h-3.5" />
-          <span>Декомпозировать</span>
-        </button>
-        <button class="run-action !text-[#a4c0ac] font-semibold" :disabled="isProcessing || !projectLoaded" @click="optimizeCodeWithAi" title="Оптимизировать проект с AI (Gemini 3.8 Flash)">
+      <!-- 2. Run Button (Чистая иконка запуска) -->
+      <button 
+        class="jb-btn-silver !w-7 !h-7 !p-0 flex items-center justify-center shrink-0 cursor-pointer" 
+        :disabled="isProcessing || !projectLoaded" 
+        @click="runProjectCode" 
+        title="Скомпилировать и запустить проект (JDK 21)"
+      >
+        <Play class="w-3.5 h-3.5 fill-black stroke-black" />
+      </button>
+
+      <!-- 3. Модули & Фикс (Единый серебряный стиль) -->
+      <!-- 3.1 Модули -->
+      <div class="jb-pill-silver">
+        <span class="pill-label">Модули</span>
+        <button 
+          class="pill-btn"
+          :disabled="isProcessing || !projectLoaded" 
+          @click="decomposeCodeWithAi" 
+          title="Декомпозировать через Gemini AI"
+        >
           <Sparkles class="w-3.5 h-3.5" />
-          <span>Оптимизировать с AI</span>
+          <span>AI</span>
         </button>
         <button 
-          v-if="pendingOptimizationResult"
-          class="run-action !text-[#090b10] !bg-[#a4c0ac] hover:!bg-[#b8d4c0] font-semibold shadow-sm"
-          @click="applyPendingOptimization"
-          title="Записать предложенный код в проект и обновить файлы"
+          class="pill-btn"
+          :disabled="isProcessing || !projectLoaded" 
+          @click="runDecomposition" 
+          title="Декомпозировать локально (AST граф)"
         >
-          <Check class="w-3.5 h-3.5" />
-          <span>Обновить код</span>
-        </button>
-        <button class="run-action !text-[#ebcb8b]" :disabled="isProcessing || !projectLoaded" @click="optimizeCode" title="Оптимизировать проект (правила AST)">
-          <Zap class="w-3.5 h-3.5" />
-          <span>Optimize</span>
+          <Boxes class="w-3.5 h-3.5" />
+          <span>Локально</span>
         </button>
       </div>
 
+      <!-- 3.2 Фикс -->
+      <div class="jb-pill-silver">
+        <span class="pill-label">Фикс</span>
+        <button 
+          class="pill-btn"
+          :disabled="isProcessing || !projectLoaded" 
+          @click="optimizeCodeWithAi" 
+          title="Оптимизировать через Gemini AI"
+        >
+          <Sparkles class="w-3.5 h-3.5" />
+          <span>AI</span>
+        </button>
+        <button 
+          class="pill-btn"
+          :disabled="isProcessing || !projectLoaded" 
+          @click="optimizeCode" 
+          title="Оптимизировать локально (AST)"
+        >
+          <Zap class="w-3.5 h-3.5" />
+          <span>Локально</span>
+        </button>
+      </div>
+
+      <!-- 3.3 Применить предложенные изменения (Diff Pending) -->
+      <button 
+        v-if="pendingOptimizationResult"
+        class="jb-btn-silver !h-7 !px-2.5 !bg-gradient-to-r !from-emerald-300 !to-emerald-100 !border-emerald-500 animate-pulse font-bold text-xs flex items-center gap-1.5 shrink-0 cursor-pointer"
+        @click="applyPendingOptimization"
+        title="Записать предложенный код в проект и обновить файлы"
+      >
+        <Check class="w-3.5 h-3.5" />
+        <span>Применить</span>
+      </button>
+
+      <!-- 4. Теплокарта -->
+      <button 
+        class="jb-btn-silver !h-7 !px-2.5 flex items-center gap-1.5 shrink-0 cursor-pointer"
+        :class="{ '!bg-[#fef08a] !border-amber-400': heatmapMode }"
+        :disabled="!graphNodes.length"
+        @click="heatmapMode = !heatmapMode" 
+        title="Тепловая карта сложности узлов (Heatmap)"
+      >
+        <Flame class="w-3.5 h-3.5" :class="heatmapMode ? 'text-amber-700 animate-pulse' : ''" />
+        <span>Теплокарта</span>
+      </button>
+
+      <!-- 5. Карта (Миникарта) & Масштабирование -->
+      <button 
+        class="jb-btn-silver !w-7 !h-7 !p-0 flex items-center justify-center shrink-0 cursor-pointer"
+        :class="{ '!bg-[#bae6fd] !border-sky-400': showMiniMap }"
+        :disabled="!graphNodes.length"
+        @click="showMiniMap = !showMiniMap" 
+        title="Показать / скрыть миникарту"
+      >
+        <MapIcon class="w-3.5 h-3.5" />
+      </button>
+
+      <!-- Zoom & Fit View -->
+      <div class="flex items-center gap-1 shrink-0">
+        <button class="jb-btn-silver !w-7 !h-7 !p-0 flex items-center justify-center cursor-pointer" :disabled="!graphNodes.length" @click="zoomIn({ duration: 200 })" title="Приблизить граф (+)">
+          <Plus class="w-3.5 h-3.5" />
+        </button>
+        <button class="jb-btn-silver !w-7 !h-7 !p-0 flex items-center justify-center cursor-pointer" :disabled="!graphNodes.length" @click="zoomOut({ duration: 200 })" title="Отдалить граф (−)">
+          <Minus class="w-3.5 h-3.5" />
+        </button>
+        <button class="jb-btn-silver !w-7 !h-7 !p-0 flex items-center justify-center cursor-pointer" :disabled="!projectLoaded || !graphNodes.length" @click="focusGraph" title="По размеру экрана (Fit View)">
+          <Maximize2 class="w-3.5 h-3.5" />
+        </button>
+      </div>
+
+      <!-- 6. Right Actions: Импорт, Экспорт, PDF, Поиск -->
       <div class="toolbar-actions">
-        <span class="toolbar-inspection" :class="highSeverityDefectCount ? 'has-defects' : 'is-clean'">{{ highSeverityDefectCount }} дефектов</span>
+        <!-- Чистая иконка Импорта -->
         <FileImportButton @files-loaded="handleProjectLoaded" @error="handleImportError" />
-        <button class="jb-btn-silver" :disabled="!projectLoaded" @click="exportProject" title="Скачать Java-проект">
+
+        <!-- Чистая иконка Экспорта -->
+        <button 
+          class="jb-btn-silver !w-7 !h-7 !p-0 flex items-center justify-center shrink-0 cursor-pointer" 
+          :disabled="!projectLoaded" 
+          @click="exportProject" 
+          title="Экспортировать Java-проект"
+        >
           <Download class="w-3.5 h-3.5" />
-          <span>Export Java</span>
         </button>
 
-        <!-- Audit Report Button (Opens Modal) -->
+        <!-- Отчет в PDF (с кодом) -->
         <button 
-          class="jb-btn-silver cursor-pointer" 
-          @click="openAuditModal" 
-          title="Сформировать аудиторский отчет (PDF / Markdown)"
+          class="jb-btn-silver !h-7 !px-2.5 flex items-center gap-1.5 shrink-0 cursor-pointer" 
+          :disabled="!projectLoaded" 
+          @click="exportAuditReport('pdf')" 
+          title="Сформировать официальный PDF-отчет с исправленным Java-кодом"
         >
           <FileText class="w-3.5 h-3.5" />
-          <span>Отчет</span>
+          <span>PDF</span>
         </button>
+
+        <!-- Знак поиска в правом верхнем краю -->
+        <button 
+          class="jb-btn-silver !w-7 !h-7 !p-0 flex items-center justify-center shrink-0 cursor-pointer" 
+          :class="{ '!bg-[#cbd5e1]': searchVisible }"
+          @click="searchVisible = !searchVisible" 
+          title="Поиск по узлам графа"
+        >
+          <Search class="w-3.5 h-3.5" />
+        </button>
+
+        <!-- Текст TECHNOLOGY в правом верхнем краю -->
+        <span class="text-[10px] font-mono font-bold tracking-widest text-silver-dark px-1.5 select-none hidden md:inline-block">TECHNOLOGY</span>
       </div>
     </header>
 
@@ -104,7 +200,7 @@
       >
         <aside 
           v-if="leftTab"
-          class="w-60 bg-[#0c0e15] border-r border-white/[0.08] flex flex-col shrink-0"
+          class="w-80 bg-[#0c0e15] border-r border-white/[0.08] flex flex-col shrink-0"
         >
           <!-- Tool Window Header -->
           <div class="h-8 px-3 border-b border-white/[0.08] flex items-center justify-between bg-[#0a0c13]">
@@ -159,84 +255,118 @@
                 </button>
               </div>
             </div>
-            <div v-else class="p-4 text-center text-xs text-silver-dark">
-              <Info class="w-8 h-8 mx-auto mb-2 opacity-40" />
-              <p>Импортируйте Java-файлы</p>
+            <div v-else class="p-4 text-center text-xs text-silver-dark space-y-3">
+              <FolderTree class="w-8 h-8 mx-auto opacity-40 text-silver-steel" />
+              <p>Нет открытых файлов проекта</p>
+              <div class="flex justify-center">
+                <FileImportButton @files-loaded="handleProjectLoaded" @error="handleImportError" />
+              </div>
             </div>
           </div>
 
           <!-- Analysis Panel -->
           <div v-if="leftTab === 'analysis'" class="flex-1 overflow-y-auto p-2">
             <div v-if="analysisReport" class="space-y-3">
-              <!-- Header with quick PDF export -->
+              <!-- Header with quick PDF export and AI Audit (Единый серебряный стиль) -->
               <div class="flex items-center justify-between px-1 text-xs">
-                <span class="text-silver-steel text-[11px] font-medium">Аудит архитектуры</span>
-                <button 
-                  class="text-[10px] text-[#88c0d0] hover:text-[#b8e0ee] hover:underline flex items-center gap-1 cursor-pointer transition-colors"
-                  @click="exportAuditReport('pdf')"
-                  title="Экспорт полного аудиторского отчета в PDF"
-                >
-                  <FileText class="w-3 h-3" />
-                  <span>Экспорт в PDF</span>
-                </button>
+                <span class="text-white text-xs font-bold uppercase tracking-wider">Аудит</span>
+                <div class="flex items-center gap-1.5">
+                  <button 
+                    class="jb-btn-silver !h-6 !px-2 text-[10px] font-bold flex items-center gap-1 cursor-pointer whitespace-nowrap"
+                    @click="runAiDefectAudit"
+                    :disabled="isAnalyzingAi || !projectLoaded"
+                    title="Запустить поиск дефектов через AI"
+                  >
+                    <Sparkles class="w-3 h-3" />
+                    <span>{{ isAnalyzingAi ? 'Анализ...' : 'AI Аудит' }}</span>
+                  </button>
+                  <button 
+                    class="jb-btn-silver !h-6 !px-2 text-[10px] font-bold flex items-center gap-1 cursor-pointer whitespace-nowrap"
+                    @click="exportAuditReport('pdf')"
+                    title="Экспорт полного аудиторского отчета в PDF"
+                  >
+                    <FileText class="w-3 h-3" />
+                    <span>PDF</span>
+                  </button>
+                </div>
               </div>
-              <!-- Subtabs: Проблемы / Рекомендации / Метрики -->
-              <div class="flex border-b border-white/[0.08] bg-[#090b10] rounded p-1 gap-1">
+
+              <!-- Subtabs: Проблемы / Рекомендации / Метрики (Серебряный переключатель) -->
+              <div class="flex bg-[#050608] rounded-lg p-1 gap-1 border border-white/[0.08]">
                 <button 
-                  class="flex-1 py-1 text-[10px] font-semibold rounded transition-colors text-center"
-                  :class="activeAnalysisTab === 'defects' ? 'bg-[#88c0d0]/20 text-[#88c0d0]' : 'text-silver-steel hover:text-white'"
+                  class="flex-1 py-1 px-1.5 text-[10px] font-bold rounded-md transition-all text-center cursor-pointer whitespace-nowrap"
+                  :class="activeAnalysisTab === 'defects' 
+                    ? 'jb-btn-silver !h-auto !py-1 !px-1.5 shadow-sm' 
+                    : 'text-silver-steel hover:text-white hover:bg-white/5'"
                   @click="activeAnalysisTab = 'defects'"
                 >
                   Проблемы ({{ analysisReport.defects.length }})
                 </button>
                 <button 
-                  class="flex-1 py-1 text-[10px] font-semibold rounded transition-colors text-center"
-                  :class="activeAnalysisTab === 'recommendations' ? 'bg-[#a3be8c]/20 text-[#a3be8c]' : 'text-silver-steel hover:text-white'"
+                  class="flex-1 py-1 px-1.5 text-[10px] font-bold rounded-md transition-all text-center cursor-pointer whitespace-nowrap"
+                  :class="activeAnalysisTab === 'recommendations' 
+                    ? 'jb-btn-silver !h-auto !py-1 !px-1.5 shadow-sm' 
+                    : 'text-silver-steel hover:text-white hover:bg-white/5'"
                   @click="activeAnalysisTab = 'recommendations'"
                 >
                   Рекомендации ({{ analysisReport.recommendations.length }})
                 </button>
                 <button 
-                  class="flex-1 py-1 text-[10px] font-semibold rounded transition-colors text-center"
-                  :class="activeAnalysisTab === 'metrics' ? 'bg-[#ebcb8b]/20 text-[#ebcb8b]' : 'text-silver-steel hover:text-white'"
+                  class="flex-1 py-1 px-1.5 text-[10px] font-bold rounded-md transition-all text-center cursor-pointer whitespace-nowrap"
+                  :class="activeAnalysisTab === 'metrics' 
+                    ? 'jb-btn-silver !h-auto !py-1 !px-1.5 shadow-sm' 
+                    : 'text-silver-steel hover:text-white hover:bg-white/5'"
                   @click="activeAnalysisTab = 'metrics'"
                 >
                   Метрики
                 </button>
               </div>
 
-              <!-- Complexity & Speedup Widget -->
-              <div class="p-3 bg-[#131722] rounded border border-white/[0.10]">
-                <div class="text-[10px] uppercase font-bold text-silver-dark tracking-wider mb-2 flex items-center justify-between">
-                  <span class="flex items-center gap-1.5"><Gauge class="w-3.5 h-3.5 text-[#ebcb8b]" /> Сложность алгоритмов</span>
-                  <span class="text-[#ebcb8b] font-mono text-[9px]">Big-O CFG</span>
+              <!-- Complexity & Speedup Widget (Графит и серебро) -->
+              <div class="p-3 bg-[#0d1017] rounded-lg border border-white/[0.10] space-y-2.5">
+                <div class="text-[10px] uppercase font-bold text-silver-dark tracking-wider flex items-center justify-between">
+                  <span class="flex items-center gap-1.5 text-white font-semibold">
+                    <Gauge class="w-3.5 h-3.5 text-silver-steel" /> Сложность алгоритмов
+                  </span>
+                  <span class="font-mono text-[9px] px-1.5 py-0.5 rounded bg-white/5 border border-white/10 text-silver-steel">Big-O CFG</span>
                 </div>
-                <div class="flex items-center justify-between text-xs font-mono py-1.5 px-2.5 rounded bg-black/40 border border-white/[0.06]">
-                  <span :class="currentBigO === 'O(1)' ? 'text-[#a3be8c]' : currentBigO === 'O(n)' ? 'text-[#ebcb8b]' : 'text-[#bf616a]'" class="font-semibold">Текущая: {{ currentBigO }}</span>
-                  <span class="text-silver-dark">──►</span>
-                  <span class="text-[#a3be8c] font-semibold">После: {{ targetBigO }}</span>
+                
+                <div class="flex items-center justify-between text-xs font-mono py-1.5 px-3 rounded-md bg-black/60 border border-white/[0.08]">
+                  <div class="flex items-center gap-1.5">
+                    <span class="text-[10px] text-silver-steel">Текущая:</span>
+                    <span :class="currentBigO === 'O(1)' ? 'text-emerald-400' : currentBigO === 'O(n)' ? 'text-amber-300' : 'text-rose-400'" class="font-bold">{{ currentBigO }}</span>
+                  </div>
+                  <span class="text-silver-dark font-sans text-xs">➔</span>
+                  <div class="flex items-center gap-1.5">
+                    <span class="text-[10px] text-silver-steel">После:</span>
+                    <span class="text-emerald-400 font-bold">{{ targetBigO }}</span>
+                  </div>
                 </div>
-                <div class="mt-2.5 flex items-center justify-between text-xs">
-                  <span class="text-silver-steel">Ожидаемое ускорение:</span>
-                  <span class="font-bold text-[#a3be8c] bg-[#a3be8c]/10 px-2 py-0.5 rounded border border-[#a3be8c]/30">{{ estimatedSpeedup }}</span>
+
+                <div class="flex items-center justify-between text-xs pt-0.5">
+                  <span class="text-silver-steel text-[11px]">Ожидаемое ускорение:</span>
+                  <span class="font-mono font-bold text-xs text-black px-2 py-0.5 rounded jb-btn-silver !h-5 !p-0 !px-2 pointer-events-none select-none">{{ estimatedSpeedup }}</span>
                 </div>
               </div>
 
               <!-- Subtab 1: Defects -->
               <div v-if="activeAnalysisTab === 'defects'" class="space-y-2">
                 <!-- Staged optimization banner -->
-                <div v-if="pendingOptimizationResult" class="p-2.5 rounded bg-emerald-950/40 border border-emerald-500/30 flex items-center justify-between gap-2">
+                <div v-if="pendingOptimizationResult" class="p-2.5 rounded-lg bg-emerald-950/30 border border-emerald-500/40 flex items-center justify-between gap-2">
                   <div class="text-[11px] text-emerald-300 font-medium flex items-center gap-1.5">
                     <Sparkles class="w-3.5 h-3.5 shrink-0 text-emerald-400" />
-                    <span>AI исправил {{ pendingFixedDefectsCount }} дефект(ов)</span>
+                    <span>Исправлено: {{ pendingFixedDefectsCount }} дефект(ов)</span>
                   </div>
-                  <button class="px-2.5 py-1 text-[11px] font-bold rounded bg-emerald-400 text-[#090b10] hover:bg-emerald-300 transition-colors cursor-pointer" @click="applyPendingOptimization">
-                    Применить в проект
+                  <button 
+                    class="jb-btn-silver !h-6 !px-2.5 !bg-gradient-to-r !from-emerald-300 !to-emerald-100 !border-emerald-500 text-[11px] font-bold cursor-pointer" 
+                    @click="applyPendingOptimization"
+                  >
+                    Применить
                   </button>
                 </div>
 
                 <!-- Empty state when all defects resolved -->
-                <div v-if="analysisReport.defects.length === 0" class="p-5 text-center bg-[#0d1612] rounded border border-sage-border/40 space-y-2">
+                <div v-if="analysisReport.defects.length === 0" class="p-5 text-center bg-[#0d1612] rounded-lg border border-sage-border/40 space-y-2">
                   <CheckCircle2 class="w-7 h-7 text-sage-text mx-auto" />
                   <p class="font-bold text-xs text-silver-white">Все дефекты устранены!</p>
                   <p class="text-[10px] text-silver-steel">AST и AI анализ подтверждают отсутствие неэффективных циклов O(n²) и критических проблем.</p>
@@ -245,70 +375,90 @@
                 <div 
                   v-for="defect in analysisReport.defects"
                   :key="defect.id"
-                  class="defect-card bg-graphite-card rounded border p-2.5 text-xs cursor-pointer hover:border-white/20 transition-colors"
+                  class="defect-card rounded-lg border p-3 text-xs cursor-pointer transition-all duration-150 bg-[#0d1017]"
                   :class="[
-                    defect.severity === 'HIGH' ? 'border-titanium-border' : 'border-white/[0.10]',
-                    selectedDefect?.id === defect.id ? 'ring-1 ring-sky-400/50' : '',
-                    isDefectResolvedInPending(defect) ? 'opacity-70 bg-sage-text/5 border-sage-border/40' : ''
+                    defect.severity === 'HIGH' ? 'border-titanium-border/80 shadow-[0_2px_8px_rgba(0,0,0,0.4)]' : 'border-white/[0.08]',
+                    selectedDefect?.id === defect.id ? 'ring-1 ring-white/50 border-white/40' : 'hover:border-white/20',
+                    isDefectResolvedInPending(defect) ? 'opacity-60 bg-emerald-950/10 border-emerald-500/30' : ''
                   ]"
                   @click="jumpToDefect(defect)"
                 >
                   <div class="flex items-start justify-between gap-2">
                     <div class="flex items-start gap-1.5 min-w-0">
-                      <CheckCircle2 v-if="isDefectResolvedInPending(defect)" class="w-3.5 h-3.5 text-sage-text shrink-0 mt-0.5" />
-                      <AlertTriangle v-else-if="defect.severity === 'HIGH'" class="w-3.5 h-3.5 text-titanium-text shrink-0 mt-0.5" />
+                      <CheckCircle2 v-if="isDefectResolvedInPending(defect)" class="w-3.5 h-3.5 text-emerald-400 shrink-0 mt-0.5" />
+                      <AlertTriangle v-else-if="defect.severity === 'HIGH'" class="w-3.5 h-3.5 text-rose-400 shrink-0 mt-0.5" />
                       <Info v-else class="w-3.5 h-3.5 text-silver-steel shrink-0 mt-0.5" />
-                      <p :class="isDefectResolvedInPending(defect) ? 'line-through text-silver-steel' : 'text-silver-platinum font-semibold'" class="break-words [overflow-wrap:anywhere]">{{ defect.title }}</p>
+                      <p :class="isDefectResolvedInPending(defect) ? 'line-through text-silver-steel' : 'text-white font-semibold text-xs'" class="break-words [overflow-wrap:anywhere] leading-snug">
+                        {{ defect.title }}
+                      </p>
                     </div>
                     <div class="flex items-center gap-1 shrink-0">
-                      <span v-if="isDefectResolvedInPending(defect)" class="text-[9px] font-mono px-1.5 py-0.5 rounded bg-sage-text/20 text-sage-text border border-sage-text/30">
-                        Устраняется в Diff
+                      <span v-if="isDefectResolvedInPending(defect)" class="text-[9px] font-mono px-1.5 py-0.5 rounded bg-emerald-900/40 text-emerald-300 border border-emerald-500/40">
+                        Устранено
                       </span>
-                      <span v-else-if="defect.complexity" class="text-[9px] font-mono px-1.5 py-0.5 rounded bg-[#bf616a]/20 text-[#bf616a] border border-[#bf616a]/30">
+                      <span v-else-if="defect.complexity" class="text-[9px] font-mono px-1.5 py-0.5 rounded bg-rose-950/50 text-rose-300 border border-rose-500/40 font-bold">
                         {{ defect.complexity }}
                       </span>
                     </div>
                   </div>
 
-                  <p class="text-silver-dark text-[10px] font-mono mt-1">
-                    {{ defect.location.filePath }}:{{ defect.location.startLine }}
+                  <p class="text-silver-dark text-[10px] font-mono mt-1.5 flex items-center gap-1">
+                    <FileCode2 class="w-3 h-3 text-silver-dark" />
+                    <span>{{ defect.location.filePath }}:{{ defect.location.startLine }}</span>
                   </p>
 
-                  <div class="mt-2 pt-2 border-t border-white/[0.06] space-y-1 text-[11px]">
-                    <p class="text-silver-steel"><strong class="text-silver-dark font-medium">Риск:</strong> Рост времени при увеличении объема входа</p>
-                    <p class="text-silver-steel"><strong class="text-silver-dark font-medium">Рекомендация:</strong> {{ defect.description }}</p>
+                  <div class="mt-2 pt-2 border-t border-white/[0.06] space-y-1.5 text-[11px] leading-relaxed">
+                    <p class="text-silver-steel"><span class="text-silver-dark font-medium">Риск:</span> Рост времени при увеличении объема входа</p>
+                    <p class="text-silver-steel"><span class="text-silver-dark font-medium">Рекомендация:</span> {{ defect.description }}</p>
                   </div>
 
-                  <div class="mt-2 flex items-center justify-between gap-2">
+                  <div class="mt-2.5 pt-2 border-t border-white/[0.06] flex items-center justify-between gap-2">
                     <button 
-                      class="text-[10px] text-[#88c0d0] hover:underline flex items-center gap-1"
+                      class="text-[10px] text-silver-steel hover:text-white flex items-center gap-1 transition-colors cursor-pointer py-1 px-1.5 rounded hover:bg-white/5"
                       @click.stop="jumpToDefect(defect)"
+                      title="Показать узел на графе"
                     >
-                      <Search class="w-3 h-3" /> Найти на графе
+                      <Search class="w-3 h-3" />
+                      <span>Найти на графе</span>
                     </button>
-                    <button 
-                      class="px-2 py-0.5 text-[10px] rounded bg-[#a4c0ac]/20 hover:bg-[#a4c0ac]/30 text-[#a4c0ac] border border-[#a4c0ac]/30"
-                      @click.stop="optimizeCode"
-                    >
-                      Исправить
-                    </button>
+
+                    <!-- Unified Silver Fix Pill (Модульный серебряный стиль) -->
+                    <div class="jb-pill-silver !h-6 shrink-0">
+                      <span class="pill-label !text-[9px] !px-1.5">Фикс</span>
+                      <button 
+                        class="pill-btn !text-[10px] !px-2 whitespace-nowrap"
+                        @click.stop="optimizeCodeWithAi"
+                        title="Починить через AI"
+                      >
+                        <Sparkles class="w-2.5 h-2.5" />
+                        <span>AI</span>
+                      </button>
+                      <button 
+                        class="pill-btn !text-[10px] !px-2 whitespace-nowrap"
+                        @click.stop="optimizeCode"
+                        title="Починить локально (AST)"
+                      >
+                        <Zap class="w-2.5 h-2.5" />
+                        <span>Локально</span>
+                      </button>
+                    </div>
                   </div>
                 </div>
 
                 <div
                   v-if="selectedDefect"
-                  class="bg-[#0a0d12] rounded border border-sky-400/30 p-3 text-xs space-y-3 mt-3"
+                  class="bg-[#0a0d12] rounded-lg border border-white/20 p-3 text-xs space-y-3 mt-3 shadow-xl"
                 >
                   <div class="flex items-start justify-between gap-2">
                     <div>
-                      <p class="text-silver-platinum font-semibold">{{ selectedDefect.title }}</p>
+                      <p class="text-white font-semibold">{{ selectedDefect.title }}</p>
                       <p class="text-silver-dark mt-1 font-mono text-[10px]">
                         {{ selectedDefect.location.filePath }}:
                         {{ selectedDefect.location.startLine }}–{{ selectedDefect.location.endLine }}
                       </p>
                     </div>
                     <button
-                      class="text-silver-steel hover:text-white"
+                      class="text-silver-steel hover:text-white cursor-pointer"
                       title="Закрыть подробности"
                       @click.stop="selectedDefect = null"
                     >
@@ -317,22 +467,22 @@
                   </div>
 
                   <div>
-                    <p class="text-silver-dark uppercase tracking-wider text-[10px] mb-1">Описание дефекта</p>
-                    <p class="text-silver-brushed whitespace-pre-wrap text-[11px]">{{ selectedDefect.description }}</p>
+                    <p class="text-silver-dark uppercase tracking-wider text-[10px] mb-1 font-bold">Описание дефекта</p>
+                    <p class="text-silver-brushed whitespace-pre-wrap text-[11px] leading-relaxed">{{ selectedDefect.description }}</p>
                   </div>
 
                   <div v-if="selectedDefect.complexity">
-                    <p class="text-silver-dark uppercase tracking-wider text-[10px] mb-1">Сложность</p>
-                    <p class="font-mono text-titanium-text">{{ selectedDefect.complexity }}</p>
+                    <p class="text-silver-dark uppercase tracking-wider text-[10px] mb-1 font-bold">Сложность</p>
+                    <p class="font-mono text-rose-400 font-bold">{{ selectedDefect.complexity }}</p>
                   </div>
 
                   <div v-if="selectedDefect.codeFragment">
-                    <p class="text-silver-dark uppercase tracking-wider text-[10px] mb-1">Фрагмент кода</p>
-                    <pre class="max-h-40 overflow-auto rounded bg-black/30 p-2 text-[10px] leading-relaxed text-silver-brushed whitespace-pre-wrap">{{ selectedDefect.codeFragment }}</pre>
+                    <p class="text-silver-dark uppercase tracking-wider text-[10px] mb-1 font-bold">Фрагмент кода</p>
+                    <pre class="max-h-40 overflow-auto rounded bg-black/40 border border-white/10 p-2 text-[10px] leading-relaxed text-silver-brushed whitespace-pre-wrap font-mono">{{ selectedDefect.codeFragment }}</pre>
                   </div>
 
                   <button
-                    class="w-full jb-btn-secondary justify-center text-xs"
+                    class="w-full jb-btn-silver !h-7 justify-center text-xs font-bold cursor-pointer"
                     @click.stop="jumpToDefect(selectedDefect)"
                   >
                     Перейти к строке {{ selectedDefect.location.startLine }}
@@ -345,49 +495,49 @@
                 <div 
                   v-for="(rec, idx) in analysisReport.recommendations"
                   :key="idx"
-                  class="bg-graphite-card rounded border border-white/[0.10] p-2.5 text-xs space-y-1.5"
+                  class="bg-[#0d1017] rounded-lg border border-white/[0.08] p-3 text-xs space-y-2 hover:border-white/20 transition-all"
                 >
-                  <p class="text-silver-platinum font-semibold">{{ rec.title }}</p>
+                  <p class="text-white font-semibold text-xs leading-snug">{{ rec.title }}</p>
                   <p class="text-silver-steel text-[11px] leading-relaxed">{{ rec.description }}</p>
-                  <div class="pt-1.5 flex items-center justify-between border-t border-white/[0.06] text-[10px]">
-                    <span class="text-[#a3be8c] font-medium">Эффект: {{ rec.expectedBenefit }}</span>
-                    <button class="px-2 py-0.5 rounded bg-white/10 hover:bg-white/20 text-white" @click="optimizeCode">Применить</button>
+                  <div class="pt-2 flex items-center justify-between border-t border-white/[0.06] text-[10px]">
+                    <span class="text-emerald-400 font-medium">Эффект: {{ rec.expectedBenefit }}</span>
+                    <button class="jb-btn-silver !h-5 !px-2 text-[10px] font-bold cursor-pointer" @click="applyDirectOptimization">Применить</button>
                   </div>
                 </div>
-                <div v-if="analysisReport.recommendations.length === 0" class="text-center py-4 text-xs text-silver-dark">
+                <div v-if="analysisReport.recommendations.length === 0" class="text-center py-6 text-xs text-silver-dark">
                   Нет активных рекомендаций
                 </div>
               </div>
 
               <!-- Subtab 3: Metrics -->
               <div v-else-if="activeAnalysisTab === 'metrics'" class="space-y-3">
-                <div class="bg-graphite-card rounded border border-white/[0.10] p-3">
-                  <h4 class="text-[10px] uppercase tracking-wider text-silver-dark font-bold mb-2">Метрики кода</h4>
-                  <div class="space-y-1.5 text-xs font-mono">
-                    <div class="flex justify-between">
+                <div class="bg-[#0d1017] rounded-lg border border-white/[0.08] p-3">
+                  <h4 class="text-[10px] uppercase tracking-wider text-silver-dark font-bold mb-2.5">Метрики кода</h4>
+                  <div class="space-y-2 text-xs font-mono">
+                    <div class="flex justify-between py-1 border-b border-white/[0.04]">
                       <span class="text-silver-steel">Всего строк:</span>
-                      <span class="text-silver-platinum font-semibold">{{ analysisReport.metrics.totalLines }}</span>
+                      <span class="text-white font-semibold">{{ analysisReport.metrics.totalLines }}</span>
                     </div>
-                    <div class="flex justify-between">
+                    <div class="flex justify-between py-1 border-b border-white/[0.04]">
                       <span class="text-silver-steel">Всего методов:</span>
-                      <span class="text-silver-platinum font-semibold">{{ analysisReport.metrics.totalMethods }}</span>
+                      <span class="text-white font-semibold">{{ analysisReport.metrics.totalMethods }}</span>
                     </div>
-                    <div class="flex justify-between">
+                    <div class="flex justify-between py-1 border-b border-white/[0.04]">
                       <span class="text-silver-steel">Средняя сложность:</span>
-                      <span class="text-silver-platinum font-semibold">{{ analysisReport.metrics.averageComplexity.toFixed(1) }}</span>
+                      <span class="text-white font-semibold">{{ analysisReport.metrics.averageComplexity.toFixed(1) }}</span>
                     </div>
-                    <div class="flex justify-between">
+                    <div class="flex justify-between py-1 border-b border-white/[0.04]">
                       <span class="text-silver-steel">Макс. сложность:</span>
-                      <span class="text-[#bf616a] font-semibold">{{ analysisReport.metrics.maxComplexity }}</span>
+                      <span class="text-rose-400 font-bold">{{ analysisReport.metrics.maxComplexity }}</span>
                     </div>
-                    <div class="flex justify-between">
+                    <div class="flex justify-between py-1">
                       <span class="text-silver-steel">Дубликаты блоков:</span>
-                      <span class="text-silver-platinum font-semibold">{{ analysisReport.metrics.duplicatedBlocks }}</span>
+                      <span class="text-white font-semibold">{{ analysisReport.metrics.duplicatedBlocks }}</span>
                     </div>
                   </div>
                 </div>
 
-                <div class="bg-graphite-card rounded border border-white/[0.10] p-3 text-[11px] space-y-1.5 text-silver-steel">
+                <div class="bg-[#0d1017] rounded-lg border border-white/[0.08] p-3 text-[11px] space-y-1.5 text-silver-steel">
                   <div class="text-[10px] uppercase font-bold text-silver-dark mb-1">Java Scope</div>
                   <div class="flex items-center gap-1.5 text-emerald-400">✓ java.lang & Управление потоком (Java 21)</div>
                   <div class="flex items-center gap-1.5 text-emerald-400">✓ java.util (Collections, Map, Stream)</div>
@@ -422,90 +572,43 @@
       <main ref="workspaceElement" class="workspace-main flex-1 min-w-0 min-h-0 flex flex-col overflow-hidden">
         
         <!-- Top: Graph Canvas -->
-        <section class="graph-panel flex-1 min-h-0 flex flex-col border-b border-white/[0.08] overflow-hidden bg-[#040507]">
-          <!-- Graph Toolbar -->
-          <div class="graph-toolbar">
-            <div class="flex items-center gap-2 text-xs shrink-0">
-              <Workflow class="w-4 h-4 text-[#a4c0ac]" />
-              <span class="font-mono">Control Flow Graph</span>
-              <span class="text-silver-steel">· {{ graphNodes.length }} / {{ rawGraphData.nodes.length || graphNodes.length }} узлов</span>
-            </div>
-            <div class="graph-actions flex items-center gap-1.5">
-              <button class="jb-btn-secondary" :disabled="!projectLoaded" @click="openMainFile" :title="currentMainFile || 'Активный файл'">{{ currentMainFile ? currentMainFile.split('/').pop() : 'Файл' }}</button>
-              <button class="jb-icon-btn" :disabled="isProcessing || !projectLoaded" @click="runOptimization" title="Запуск" aria-label="Запуск"><Play class="w-4 h-4" /></button>
-              
-              <!-- Zoom & Fit Controls -->
-              <div class="flex items-center gap-0.5 bg-black/40 p-0.5 rounded border border-white/10">
-                <button class="jb-icon-btn !w-6 !h-6 text-silver-steel hover:text-white" :disabled="!graphNodes.length" @click="zoomIn({ duration: 200 })" title="Приблизить граф (+)">
-                  <span class="font-bold text-xs leading-none">+</span>
-                </button>
-                <button class="jb-icon-btn !w-6 !h-6 text-silver-steel hover:text-white" :disabled="!graphNodes.length" @click="zoomOut({ duration: 200 })" title="Отдалить граф (−)">
-                  <span class="font-bold text-xs leading-none">−</span>
-                </button>
-                <button class="jb-icon-btn !w-6 !h-6 text-silver-steel hover:text-white" :disabled="!projectLoaded || !graphNodes.length" @click="focusGraph" title="По размеру графа (Fit View)">
-                  <Maximize2 class="w-3.5 h-3.5" />
-                </button>
-                <button 
-                  class="jb-icon-btn !w-6 !h-6 transition-colors" 
-                  :class="showMiniMap ? 'text-[#a4c0ac] bg-white/10' : 'text-silver-steel hover:text-white'" 
-                  :disabled="!graphNodes.length" 
-                  @click="showMiniMap = !showMiniMap" 
-                  title="Показать / скрыть миникарту навигатора"
-                >
-                  <MapIcon class="w-3.5 h-3.5" />
+        <section class="graph-panel flex-1 min-h-0 flex flex-col border-b border-white/[0.08] relative overflow-hidden bg-[#040507]">
+          <!-- Floating Search Panel when active -->
+          <Transition
+            enter-active-class="transition-all duration-150 ease-out"
+            leave-active-class="transition-all duration-100 ease-in"
+            enter-from-class="opacity-0 -translate-y-2 scale-95"
+            leave-to-class="opacity-0 -translate-y-2 scale-95"
+          >
+            <div v-if="searchVisible" class="search-panel absolute top-3 right-3 z-30 w-80 max-w-[90vw] p-3 rounded-lg border border-white/20 bg-[#0c0e15]/95 shadow-2xl backdrop-blur">
+              <div class="flex items-center justify-between mb-2 pb-1.5 border-b border-white/10">
+                <span class="text-[10px] font-mono text-silver-steel uppercase tracking-wider font-semibold">Поиск по узлам графа</span>
+                <button class="text-silver-dark hover:text-white transition-colors cursor-pointer" @click="searchVisible = false">
+                  <X class="w-3.5 h-3.5" />
                 </button>
               </div>
-
-              <!-- Heatmap Toggle Button -->
-              <button 
-                class="px-2 py-1 rounded text-[10px] font-mono transition-all flex items-center gap-1 cursor-pointer select-none"
-                :class="heatmapMode ? 'bg-gradient-to-r from-red-600/30 via-orange-600/30 to-amber-600/30 border border-orange-500/60 text-white shadow-[0_0_12px_rgba(249,115,22,0.3)]' : 'bg-black/40 border border-white/10 text-silver-steel hover:text-white hover:bg-white/10'"
-                :disabled="!graphNodes.length"
-                @click="heatmapMode = !heatmapMode" 
-                title="Тепловая карта сложности узлов (Heatmap)"
-              >
-                <Flame class="w-3 h-3" :class="heatmapMode ? 'text-orange-400 animate-pulse' : 'text-silver-steel'" />
-                <span class="font-semibold">Heatmap</span>
-              </button>
-
-              <!-- Graph Size Presets & Maximize -->
-              <div class="flex items-center gap-0.5 bg-black/40 p-0.5 rounded border border-white/10 text-[10px] font-mono">
+              <input 
+                v-model="searchQuery" 
+                aria-label="Поиск по узлам" 
+                placeholder="Поиск по коду и названиям…" 
+                class="w-full rounded bg-white/5 border border-white/10 px-2.5 py-1.5 text-xs text-silver-platinum outline-none focus:border-white/40" 
+                autofocus 
+                @keydown.esc="searchVisible = false"
+              />
+              <div v-if="searchQuery.trim()" class="max-h-56 overflow-auto mt-2 space-y-1">
                 <button 
-                  class="px-1.5 py-0.5 rounded transition-colors"
-                  :class="activeGraphPreset === 50 && !isGraphMaximized ? 'bg-[#a4c0ac] text-[#090b10] font-semibold' : 'hover:bg-white/10 text-silver-steel hover:text-white'"
-                  @click="setGraphHeightPreset(50)" 
-                  title="Граф 50% экрана"
+                  v-for="node in searchResults" 
+                  :key="node.id" 
+                  class="block w-full text-left rounded px-2 py-1.5 text-xs text-silver-steel hover:text-white hover:bg-white/10 transition-colors cursor-pointer" 
+                  @click="handleSearchResultClick(node)"
                 >
-                  50%
+                  <div class="font-medium truncate text-silver-platinum">{{ node.data.label }}</div>
+                  <div class="text-[10px] text-silver-dark font-mono truncate">{{ node.data.filePath }}:{{ node.data.line }}</div>
                 </button>
-                <button 
-                  class="px-1.5 py-0.5 rounded transition-colors"
-                  :class="activeGraphPreset === 75 && !isGraphMaximized ? 'bg-[#a4c0ac] text-[#090b10] font-semibold' : 'hover:bg-white/10 text-silver-steel hover:text-white'"
-                  @click="setGraphHeightPreset(75)" 
-                  title="Граф 75% экрана"
-                >
-                  75%
-                </button>
-                <button 
-                  class="px-1.5 py-0.5 rounded transition-colors font-semibold"
-                  :class="isGraphMaximized ? 'bg-[#a4c0ac] text-[#090b10]' : 'hover:bg-white/10 text-silver-steel hover:text-white'"
-                  @click="toggleMaximizeGraph" 
-                  :title="isGraphMaximized ? 'Восстановить редактор' : 'Развернуть поле графа на весь экран (100%)'"
-                >
-                  {{ isGraphMaximized ? 'Восстановить' : '100%' }}
-                </button>
+                <p v-if="!searchResults.length" class="text-xs text-silver-steel p-1">Ничего не найдено</p>
               </div>
-
-              <button class="jb-icon-btn" @click="searchVisible = !searchVisible" title="Поиск" aria-label="Поиск" :aria-expanded="searchVisible"><Search class="w-4 h-4" /></button>
             </div>
-          </div>
-          <div v-if="searchVisible" class="search-panel p-3 border-b border-white/10">
-            <input v-model="searchQuery" aria-label="Поиск по узлам" placeholder="Поиск по коду и названиям узлов…" class="w-full rounded bg-white/5 px-3 py-2 text-xs outline-none focus:ring-1 focus:ring-white/30" />
-            <div v-if="searchQuery.trim()" class="max-h-32 overflow-auto mt-2">
-              <button v-for="node in searchResults" :key="node.id" class="block w-full text-left rounded px-2 py-1 text-xs hover:bg-white/10" @click="handleNodeClick({ node })">{{ node.data.label }} · {{ node.data.filePath }}:{{ node.data.line }}</button>
-              <p v-if="!searchResults.length" class="text-xs text-silver-steel">Ничего не найдено</p>
-            </div>
-          </div>
+          </Transition>
 
           <!-- Unreal Engine Blueprint Style Method Tabs Bar -->
           <div v-if="projectLoaded && methodList.length" class="method-tabs-bar">
@@ -558,7 +661,6 @@
                 <ChromeNode
                   v-bind="props"
                   :heatmap-mode="heatmapMode"
-                  @node-click="handleNodeClick"
                   @node-dblclick="handleNodeDblClick"
                   @toggle-expand="toggleMethodExpand"
                   @open-tab="openMethodInTab"
@@ -608,9 +710,15 @@
               </div>
             </div>
             <div v-else-if="!graphNodes.length" class="flex items-center justify-center h-full text-silver-dark">
-              <div class="text-center">
-                <Workflow class="w-12 h-12 mx-auto mb-3 opacity-20" />
-                <p class="text-sm">Граф будет построен после импорта</p>
+              <div class="text-center space-y-4 max-w-md p-6 rounded-xl border border-white/10 bg-[#0c0e15]/70 backdrop-blur">
+                <Workflow class="w-12 h-12 mx-auto text-silver-steel opacity-50" />
+                <div>
+                  <h3 class="text-sm font-semibold text-silver-platinum mb-1">Рабочая область пуста</h3>
+                  <p class="text-xs text-silver-steel">Импортируйте Java-файлы проекта для начала анализа</p>
+                </div>
+                <div class="flex items-center justify-center gap-3 pt-2">
+                  <FileImportButton @files-loaded="handleProjectLoaded" @error="handleImportError" />
+                </div>
               </div>
             </div>
           </div>
@@ -745,9 +853,9 @@
               <div class="mb-3 p-2.5 rounded border border-white/10 bg-[#0e1118] text-xs text-silver-steel flex items-start gap-2.5">
                 <Sparkles class="w-4 h-4 text-[#a4c0ac] shrink-0 mt-0.5" />
                 <div class="space-y-0.5">
-                  <p class="text-silver-white font-medium text-[11px]">AI-оптимизация работает в 1 клик</p>
+                  <p class="text-silver-white font-medium text-[11px]">AI-оптимизация в 1 клик</p>
                   <p class="text-[10px] leading-relaxed text-silver-steel">
-                    Gemini автоматически улучшает весь код (O(n²) → O(n), StringBuilder, Java 21). Выбирать пункты вручную не требуется.
+                    Автоматическое улучшение кода (O(n²) → O(n), StringBuilder, Java 21). Выбирать пункты вручную не требуется.
                   </p>
                 </div>
               </div>
@@ -905,7 +1013,7 @@
                 <div class="flex items-center gap-2.5">
                   <Sparkles class="w-4 h-4 text-[#a4c0ac] shrink-0" />
                   <div>
-                    <p class="text-xs font-semibold text-silver-white">Gemini подготовил оптимизацию (изменений: {{ pendingOptimizationResult.changes.length }})</p>
+                    <p class="text-xs font-semibold text-silver-white">Подготовлена оптимизация (изменений: {{ pendingOptimizationResult.changes.length }})</p>
                     <p class="text-[10px] text-silver-steel">
                       {{ pendingOptimizationResult.verification?.compilationSuccess ? 'JDK 21 скомпилирован ✓' : 'Ошибка компиляции' }}
                       <span v-if="pendingOptimizationResult.verification">
@@ -997,6 +1105,114 @@
                 :class="log.color"
               >
                 {{ log.text }}
+              </div>
+            </div>
+
+            <!-- WSL Linux Terminal -->
+            <div v-show="activeBottomTab === 'terminal'" class="h-full flex flex-col bg-[#07090e] font-mono text-xs overflow-hidden">
+              <!-- Terminal Header Bar -->
+              <div class="flex flex-wrap items-center justify-between gap-2 px-3 py-2 border-b border-white/[0.08] bg-[#0c0e15] shrink-0">
+                <div class="flex items-center gap-2">
+                  <Terminal class="w-4 h-4 text-emerald-400" />
+                  <span class="text-xs font-semibold text-silver-white">Linux окружение WSL2</span>
+                  <span class="px-2 py-0.5 rounded text-[10px] bg-emerald-500/10 text-emerald-400 border border-emerald-500/20 font-mono">
+                    {{ terminalEnv }}
+                  </span>
+                  <span class="text-[10px] text-silver-steel truncate max-w-xs" :title="terminalCwd">
+                    📁 {{ terminalCwd }}
+                  </span>
+                </div>
+                <div class="flex items-center gap-1.5 flex-wrap">
+                  <span class="text-[10px] text-silver-dark mr-1">Быстрые команды:</span>
+                  <button 
+                    class="px-2 py-0.5 text-[10px] rounded bg-white/[0.05] hover:bg-white/[0.12] text-silver-platinum border border-white/[0.08] transition-colors"
+                    @click="runTerminalCommand('uname -a')"
+                    :disabled="terminalRunning"
+                  >
+                    uname -a
+                  </button>
+                  <button 
+                    class="px-2 py-0.5 text-[10px] rounded bg-white/[0.05] hover:bg-white/[0.12] text-silver-platinum border border-white/[0.08] transition-colors"
+                    @click="runTerminalCommand('ls -la')"
+                    :disabled="terminalRunning"
+                  >
+                    ls -la
+                  </button>
+                  <button 
+                    class="px-2 py-0.5 text-[10px] rounded bg-white/[0.05] hover:bg-white/[0.12] text-silver-platinum border border-white/[0.08] transition-colors"
+                    @click="runTerminalCommand('pwd')"
+                    :disabled="terminalRunning"
+                  >
+                    pwd
+                  </button>
+                  <button 
+                    class="px-2 py-0.5 text-[10px] rounded bg-white/[0.05] hover:bg-white/[0.12] text-silver-platinum border border-white/[0.08] transition-colors"
+                    @click="runTerminalCommand('df -h')"
+                    :disabled="terminalRunning"
+                  >
+                    df -h
+                  </button>
+                  <button 
+                    class="px-2 py-0.5 text-[10px] rounded bg-white/[0.05] hover:bg-white/[0.12] text-silver-platinum border border-white/[0.08] transition-colors"
+                    @click="runTerminalCommand('free -m')"
+                    :disabled="terminalRunning"
+                  >
+                    free -m
+                  </button>
+                  <button 
+                    class="p-1 rounded text-silver-steel hover:text-white transition-colors ml-2"
+                    @click="clearTerminal"
+                    title="Очистить терминал"
+                  >
+                    <Trash2 class="w-3.5 h-3.5" />
+                  </button>
+                </div>
+              </div>
+
+              <!-- Terminal Output Logs Area -->
+              <div class="flex-1 p-3 overflow-y-auto space-y-3 font-mono text-[11px] leading-relaxed selection:bg-emerald-500/30">
+                <div v-for="(log, idx) in terminalLogs" :key="idx" class="space-y-1">
+                  <div class="flex items-center gap-2 text-silver-steel text-[10px]">
+                    <span class="text-emerald-400 font-bold">root@wsl2:</span><span class="text-sky-300 font-semibold">{{ log.cwd }}</span><span class="text-silver-dark">$</span>
+                    <span class="text-silver-white font-semibold">{{ log.command }}</span>
+                    <span class="ml-auto text-silver-dark text-[9px]">{{ log.time }}</span>
+                    <span 
+                      v-if="log.exitCode !== 0" 
+                      class="px-1.5 py-0.2 rounded text-[9px] bg-red-500/20 text-red-400 border border-red-500/30"
+                    >
+                      exit {{ log.exitCode }}
+                    </span>
+                  </div>
+                  <pre v-if="log.output" class="p-2 rounded bg-black/40 border border-white/[0.04] text-silver-platinum whitespace-pre-wrap break-all overflow-x-auto">{{ log.output }}</pre>
+                </div>
+                <div v-if="terminalRunning" class="flex items-center gap-2 text-emerald-400 animate-pulse text-xs">
+                  <Loader2 class="w-3.5 h-3.5 animate-spin" />
+                  <span>Выполнение команды в WSL2...</span>
+                </div>
+              </div>
+
+              <!-- Terminal Input Prompt -->
+              <div class="flex items-center gap-2 px-3 py-2 bg-[#0a0c13] border-t border-white/[0.08] shrink-0">
+                <div class="text-emerald-400 font-bold text-xs shrink-0 select-none">
+                  wsl $
+                </div>
+                <input 
+                  v-model="terminalInput" 
+                  @keydown.enter.prevent="runTerminalCommand()" 
+                  @keydown.up.prevent="prevTerminalHistory"
+                  @keydown.down.prevent="nextTerminalHistory"
+                  :disabled="terminalRunning"
+                  placeholder="Введите команду Linux (например: ls, uname -a, ps aux, cat /etc/os-release)..." 
+                  class="flex-1 bg-transparent border-none text-silver-white text-xs font-mono outline-none placeholder:text-silver-dark"
+                />
+                <button 
+                  @click="runTerminalCommand()" 
+                  :disabled="terminalRunning || !terminalInput.trim()"
+                  class="px-2.5 py-1 rounded bg-white/[0.08] hover:bg-white/[0.15] text-silver-white disabled:opacity-40 transition-colors flex items-center gap-1 text-[11px]"
+                >
+                  <span>Выполнить</span>
+                  <CornerDownLeft class="w-3 h-3" />
+                </button>
               </div>
             </div>
 
@@ -1154,121 +1370,6 @@
       </main>
     </div>
 
-    <!-- ===== Audit Report Modal Dialog ===== -->
-    <div 
-      v-if="auditModalOpen" 
-      class="fixed inset-0 z-[9999] flex items-center justify-center bg-black/80 backdrop-blur-sm p-4"
-      @click.self="auditModalOpen = false"
-    >
-      <div class="w-full max-w-lg rounded-xl border border-white/20 bg-[#0e131d] shadow-2xl p-6 text-silver-brushed space-y-5">
-        
-        <!-- Modal Header -->
-        <div class="flex items-center justify-between border-b border-white/10 pb-3">
-          <div class="flex items-center gap-2.5">
-            <div class="w-8 h-8 rounded-lg bg-[#a4c0ac]/15 border border-[#a4c0ac]/30 flex items-center justify-center text-[#a4c0ac]">
-              <FileText class="w-4 h-4" />
-            </div>
-            <div>
-              <h3 class="text-sm font-bold text-white">Аудиторский отчет проекта</h3>
-              <p class="text-[11px] text-silver-steel">WHAT Enterprise Blueprint Suite • Java 21</p>
-            </div>
-          </div>
-          <button 
-            class="jb-icon-btn text-silver-steel hover:text-white" 
-            @click="auditModalOpen = false" 
-            title="Закрыть"
-          >
-            <X class="w-4 h-4" />
-          </button>
-        </div>
-
-        <!-- Export Action Options -->
-        <div class="space-y-3 pt-1">
-          <!-- Section 1: Documents -->
-          <div class="space-y-1.5">
-            <div class="text-[10px] font-semibold text-silver-dark uppercase tracking-wider px-1">Аудиторские отчеты</div>
-            
-            <button 
-              class="w-full p-2.5 rounded-lg border border-white/10 bg-[#121620] hover:bg-[#18202d] hover:border-white/20 transition-all flex items-center justify-between group cursor-pointer text-left"
-              @click="exportAuditReport('pdf')"
-            >
-              <div class="flex items-center gap-3">
-                <div class="w-8 h-8 rounded-lg bg-emerald-500/[0.08] border border-emerald-500/20 text-emerald-400/80 flex items-center justify-center shrink-0 group-hover:scale-105 transition-transform">
-                  <Printer class="w-4 h-4" />
-                </div>
-                <div>
-                  <div class="text-xs font-semibold text-silver-white group-hover:text-white transition-colors">Печать в PDF / Фирменный HTML</div>
-                  <div class="text-[11px] text-silver-dark group-hover:text-silver-steel transition-colors">Официальный отчет для презентации и заказчика</div>
-                </div>
-              </div>
-              <ChevronRight class="w-4 h-4 text-silver-dark group-hover:text-white transition-colors" />
-            </button>
-
-            <button 
-              class="w-full p-2.5 rounded-lg border border-white/10 bg-[#121620] hover:bg-[#18202d] hover:border-white/20 transition-all flex items-center justify-between group cursor-pointer text-left"
-              @click="exportAuditReport('markdown')"
-            >
-              <div class="flex items-center gap-3">
-                <div class="w-8 h-8 rounded-lg bg-sky-500/[0.08] border border-sky-500/20 text-sky-400/80 flex items-center justify-center shrink-0 group-hover:scale-105 transition-transform">
-                  <FileCode class="w-4 h-4" />
-                </div>
-                <div>
-                  <div class="text-xs font-semibold text-silver-white group-hover:text-white transition-colors">Скачать Markdown (.md)</div>
-                  <div class="text-[11px] text-silver-dark group-hover:text-silver-steel transition-colors">Таблицы дефектов и метрик для Git / PR</div>
-                </div>
-              </div>
-              <ChevronRight class="w-4 h-4 text-silver-dark group-hover:text-white transition-colors" />
-            </button>
-          </div>
-
-          <!-- Section 2: Graph Architecture Images -->
-          <div class="space-y-1.5 pt-1">
-            <div class="text-[10px] font-semibold text-silver-dark uppercase tracking-wider px-1">Снимки графа архитектуры</div>
-
-            <button 
-              class="w-full p-2.5 rounded-lg border border-white/10 bg-[#121620] hover:bg-[#18202d] hover:border-white/20 transition-all flex items-center justify-between group cursor-pointer text-left"
-              :disabled="isExportingImage || graphNodes.length === 0"
-              @click="handleExportGraphImage('png')"
-            >
-              <div class="flex items-center gap-3">
-                <div class="w-8 h-8 rounded-lg bg-indigo-500/[0.08] border border-indigo-500/20 text-indigo-400/80 flex items-center justify-center shrink-0 group-hover:scale-105 transition-transform">
-                  <ImageIcon class="w-4 h-4" />
-                </div>
-                <div>
-                  <div class="text-xs font-semibold text-silver-white group-hover:text-white transition-colors">Экспорт графа в PNG (.png)</div>
-                  <div class="text-[11px] text-silver-dark group-hover:text-silver-steel transition-colors">Четкий растровый снимок 2x Ultra HD без потерь качества</div>
-                </div>
-              </div>
-              <ChevronRight class="w-4 h-4 text-silver-dark group-hover:text-white transition-colors" />
-            </button>
-
-            <button 
-              class="w-full p-2.5 rounded-lg border border-white/10 bg-[#121620] hover:bg-[#18202d] hover:border-white/20 transition-all flex items-center justify-between group cursor-pointer text-left"
-              :disabled="isExportingImage || graphNodes.length === 0"
-              @click="handleExportGraphImage('jpeg')"
-            >
-              <div class="flex items-center gap-3">
-                <div class="w-8 h-8 rounded-lg bg-amber-500/[0.08] border border-amber-500/20 text-amber-400/80 flex items-center justify-center shrink-0 group-hover:scale-105 transition-transform">
-                  <FileImage class="w-4 h-4" />
-                </div>
-                <div>
-                  <div class="text-xs font-semibold text-silver-white group-hover:text-white transition-colors">Экспорт графа в JPEG (.jpg)</div>
-                  <div class="text-[11px] text-silver-dark group-hover:text-silver-steel transition-colors">Оптимизированное сжатое изображение для слайдов и презентаций</div>
-                </div>
-              </div>
-              <ChevronRight class="w-4 h-4 text-silver-dark group-hover:text-white transition-colors" />
-            </button>
-          </div>
-        </div>
-
-        <div class="flex items-center justify-between pt-2 border-t border-white/10 text-[11px] text-silver-dark">
-          <span>Сформировано платформой WHAT</span>
-          <button class="hover:text-white transition-colors cursor-pointer" @click="auditModalOpen = false">Отмена</button>
-        </div>
-
-      </div>
-    </div>
-
     <!-- ===== 3. STATUS BAR ===== -->
     <footer class="h-6 border-t border-white/[0.08] bg-[#0a0c13] px-3 flex items-center justify-between text-[10px] font-mono text-silver-dark shrink-0">
       <div class="flex items-center gap-3">
@@ -1336,13 +1437,14 @@ import { ref, computed, onMounted, onBeforeUnmount, nextTick, watch } from 'vue'
 import * as monaco from 'monaco-editor'
 import { 
   optimizeProjectWithAi, 
+  analyzeProjectWithAi,
+  decomposeProjectWithAi,
   applyOptimization, 
   optimizeProject, 
-  loadDemoProject, 
   mutateGraph, 
+  executeTerminalCommand,
   type VerificationResult, 
-  type OptimizationChange 
-} from './api/client'
+  type OptimizationChange} from './api/client'
 import { VueFlow, useVueFlow } from '@vue-flow/core'
 import { Background } from '@vue-flow/background'
 import { MiniMap } from '@vue-flow/minimap'
@@ -1351,10 +1453,10 @@ import {
   Settings, X, Info, AlertTriangle, CheckCircle2, Gauge,
   Workflow, Maximize2, Minimize2, ChevronDown, ChevronRight, ChevronsDown, ChevronsUp,
   ShieldCheck, Loader2, GitCompareArrows, Sparkles, Check,
-  FileText, Printer, FileCode, Map as MapIcon, Flame, Image as ImageIcon, FileImage
+  FileText, Map as MapIcon, Flame,
+  Plus, Minus, Terminal, CornerDownLeft, Trash2
 } from 'lucide-vue-next'
 import { generateAuditMarkdown, generateAuditHtml, downloadFile, openPrintableReport, type AuditReportData } from './utils/auditReport'
-import { exportGraphImage as triggerGraphExport } from './utils/exportGraph'
 import { getNodeHeatLevel, getHeatColor } from './utils/heatmap'
 import ChromeNode from './components/nodes/ChromeNode.vue'
 import FileImportButton from './components/FileImportButton.vue'
@@ -1362,7 +1464,7 @@ import FileImportButton from './components/FileImportButton.vue'
 // State
 const { setCenter, fitView, zoomIn, zoomOut, removeSelectedElements } = useVueFlow()
 const leftTab = ref<'project' | 'analysis' | 'palette' | null>(null)
-const activeBottomTab = ref<'code' | 'console' | 'tests' | 'optimization' | 'diff'>('code')
+const activeBottomTab = ref<'code' | 'console' | 'tests' | 'optimization' | 'diff' | 'terminal'>('code')
 const activeAnalysisTab = ref<'defects' | 'recommendations' | 'metrics'>('defects')
 const editedNodeCode = ref('')
 const customInput = ref('')
@@ -1461,13 +1563,12 @@ function handleMiniMapClick(eventData: any) {
 
 watch(heatmapMode, (newVal) => {
   miniMapTick.value++
-  graphNodes.value = graphNodes.value.map(n => ({
-    ...n,
-    data: {
-      ...n.data,
-      heatmapMode: newVal
+  for (let i = 0; i < graphNodes.value.length; i++) {
+    const n = graphNodes.value[i]
+    if (n.data) {
+      n.data.heatmapMode = newVal
     }
-  }))
+  }
 })
 
 const projectFiles = ref<Record<string, string>>({})
@@ -1836,12 +1937,103 @@ const selectedDefect = ref<any>(null)
 const expandedDirectories = ref<Set<string>>(new Set())
 
 
+// Terminal state & methods
+interface TerminalLogEntry {
+  cwd: string
+  command: string
+  output: string
+  exitCode: number
+  time: string
+}
+const terminalLogs = ref<TerminalLogEntry[]>([
+  {
+    cwd: '/mnt/host/c/Users/gg/Desktop',
+    command: 'uname -a',
+    output: 'Linux HOME-PC 6.18.33.2-microsoft-standard-WSL2 #1 SMP PREEMPT_DYNAMIC Thu Jun 18 21:54:43 UTC 2026 x86_64 Linux',
+    exitCode: 0,
+    time: new Date().toLocaleTimeString()
+  }
+])
+const terminalCwd = ref('/mnt/host/c/Users/gg/Desktop')
+const terminalInput = ref('')
+const terminalRunning = ref(false)
+const terminalEnv = ref('WSL2 (Linux)')
+const terminalHistory = ref<string[]>([])
+const terminalHistoryIndex = ref(-1)
+
+async function runTerminalCommand(cmdToRun?: string) {
+  const cmd = (cmdToRun !== undefined ? cmdToRun : terminalInput.value).trim()
+  if (!cmd || terminalRunning.value) return
+  
+  terminalRunning.value = true
+  terminalHistory.value.push(cmd)
+  terminalHistoryIndex.value = terminalHistory.value.length
+  if (cmdToRun === undefined) {
+    terminalInput.value = ''
+  }
+  
+  if (cmd === 'clear') {
+    terminalLogs.value = []
+    terminalRunning.value = false
+    return
+  }
+  
+  try {
+    const res = await executeTerminalCommand({
+      command: cmd,
+      cwd: terminalCwd.value
+    })
+    if (res.cwd) terminalCwd.value = res.cwd
+    if (res.environment) terminalEnv.value = res.environment
+    terminalLogs.value.push({
+      cwd: terminalCwd.value,
+      command: cmd,
+      output: res.output,
+      exitCode: res.exitCode,
+      time: new Date().toLocaleTimeString()
+    })
+  } catch (err: any) {
+    terminalLogs.value.push({
+      cwd: terminalCwd.value,
+      command: cmd,
+      output: err.message || 'Ошибка выполнения команды',
+      exitCode: 1,
+      time: new Date().toLocaleTimeString()
+    })
+  } finally {
+    terminalRunning.value = false
+  }
+}
+
+function prevTerminalHistory() {
+  if (terminalHistory.value.length === 0) return
+  if (terminalHistoryIndex.value > 0) {
+    terminalHistoryIndex.value--
+    terminalInput.value = terminalHistory.value[terminalHistoryIndex.value] || ''
+  }
+}
+
+function nextTerminalHistory() {
+  if (terminalHistoryIndex.value < terminalHistory.value.length - 1) {
+    terminalHistoryIndex.value++
+    terminalInput.value = terminalHistory.value[terminalHistoryIndex.value] || ''
+  } else {
+    terminalHistoryIndex.value = terminalHistory.value.length
+    terminalInput.value = ''
+  }
+}
+
+function clearTerminal() {
+  terminalLogs.value = []
+}
+
 const consoleLogs = ref<{ text: string; color: string }[]>([])
 
 const bottomTabs = [
   { id: 'optimization', label: 'Оптимизация', icon: Zap },
   { id: 'code', label: 'Код', icon: FileCode2 },
   { id: 'console', label: 'Консоль', icon: Settings },
+  { id: 'terminal', label: 'Терминал (WSL)', icon: Terminal },
   { id: 'tests', label: 'Тесты', icon: CheckCircle2 },
   { id: 'diff', label: 'Diff', icon: GitCompareArrows },
 ] as const
@@ -1996,13 +2188,38 @@ const diffRightContent = computed(() => {
   return projectFiles.value[diffFile.value] || ''
 })
 
-const optimizationCandidates = computed(() => (analysisReport.value?.recommendations || []).map((recommendation: any, index: number) => ({
-  id: recommendation.defectId || `recommendation-${index}`,
-  title: recommendation.title,
-  description: recommendation.description,
-  complexity: recommendation.expectedBenefit,
-  location: analysisReport.value?.defects?.find((defect: any) => defect.id === recommendation.defectId)?.location?.filePath || 'AST recommendation',
-})))
+const optimizationCandidates = computed(() => {
+  const recs = analysisReport.value?.recommendations || []
+  const defects = analysisReport.value?.defects || []
+  const seenKeys = new Set<string>()
+  const list: any[] = []
+
+  for (let i = 0; i < recs.length; i++) {
+    const r = recs[i]
+    if (!r || !r.title) continue
+    const key = `${r.title.trim().toLowerCase()}|${(r.description || '').trim().toLowerCase()}`
+    if (seenKeys.has(key)) continue
+    seenKeys.add(key)
+
+    const defect = defects.find((d: any) => d.id === r.defectId)
+    let locStr = 'AST оптимизация'
+    if (defect?.location?.filePath) {
+      const fileName = defect.location.filePath.split(/[\\/]/).pop()
+      const lineStr = defect.location.startLine ? ` : стр. ${defect.location.startLine}` : ''
+      locStr = `${fileName}${lineStr}`
+    }
+
+    list.push({
+      id: r.defectId || `recommendation-${i}`,
+      title: r.title,
+      description: r.description,
+      complexity: r.expectedBenefit,
+      location: locStr,
+    })
+  }
+
+  return list
+})
 
 const selectedOptimizationIds = ref<Set<string>>(new Set())
 const selectedOptimizationCount = computed(() => selectedOptimizationIds.value.size)
@@ -2365,6 +2582,16 @@ const searchResults = computed(() => {
   const query = searchQuery.value.trim().toLocaleLowerCase()
   return query ? graphNodes.value.filter(node => [node.data.label, node.data.code, node.data.filePath].join(' ').toLocaleLowerCase().includes(query)) : []
 })
+
+function handleSearchResultClick(node: any) {
+  handleNodeClick({ node })
+  const pos = node.computedPosition || node.position
+  const dim = node.dimensions || { width: 220, height: 85 }
+  if (pos) {
+    void setCenter(pos.x + (dim.width / 2), pos.y + (dim.height / 2), { zoom: 1.0, duration: 250 })
+  }
+}
+
 const workspaceElement = ref<HTMLElement | null>(null)
 const bottomPanelHeight = ref(300)
 const maxPanelHeight = ref(600)
@@ -2373,11 +2600,6 @@ let resizeTarget: HTMLElement | null = null
 let resizeOrigin = 0
 let resizeHeight = 0
 const isGraphMaximized = ref(false)
-const auditModalOpen = ref(false)
-
-function openAuditModal() {
-  auditModalOpen.value = true
-}
 
 function buildAuditReportData(): AuditReportData {
   const now = new Date()
@@ -2404,7 +2626,7 @@ function buildAuditReportData(): AuditReportData {
   }))
 
   return {
-    projectName: 'WHAT Enterprise Blueprints',
+    projectName: 'TECHNOLOGY',
     mainFile: currentMainFile.value ? currentMainFile.value.split('/').pop() || currentMainFile.value : 'Main.java',
     timestamp,
     metrics,
@@ -2414,12 +2636,20 @@ function buildAuditReportData(): AuditReportData {
     targetBigO: targetBigO.value,
     nodeCount: graphNodes.value.length || rawGraphData.value.nodes.length,
     verification: verificationResult.value || pendingOptimizationResult.value?.verification || null,
-    diffStats: diffStats.value
+    diffStats: diffStats.value,
+    optimizedCode: (
+      pendingOptimizationResult.value?.after?.project?.files?.[currentMainFile.value] ||
+      pendingOptimizationResult.value?.after?.project?.files?.[currentFile.value] ||
+      (pendingOptimizationResult.value?.after?.project?.files && Object.values(pendingOptimizationResult.value.after.project.files)[0]) ||
+      (pendingOptimizationResult.value?.after as any)?.code ||
+      projectFiles.value[currentMainFile.value] ||
+      projectFiles.value[currentFile.value] ||
+      ''
+    )
   }
 }
 
 function exportAuditReport(format: 'markdown' | 'pdf') {
-  auditModalOpen.value = false
   const data = buildAuditReportData()
   const fileBase = (data.mainFile || 'Project').replace(/\.[^/.]+$/, '')
   const dateStr = new Date().toISOString().slice(0, 10)
@@ -2431,23 +2661,11 @@ function exportAuditReport(format: 'markdown' | 'pdf') {
   } else {
     const html = generateAuditHtml(data)
     openPrintableReport(html)
-    consoleLogs.value.push({ text: `[Аудит] Сформирован бланк для печати и сохранения в PDF`, color: 'text-sage-text' })
+    consoleLogs.value.push({ text: `[Аудит] Сформирован официальный PDF/HTML отчет с исправленным кодом`, color: 'text-sage-text' })
   }
 }
 
-const isExportingImage = ref(false)
-
-async function handleExportGraphImage(format: 'png' | 'jpeg') {
-  auditModalOpen.value = false
-  isExportingImage.value = true
-  try {
-    await triggerGraphExport(format, currentMainFile.value || 'JavaBlueprint', (msg, color) => {
-      consoleLogs.value.push({ text: msg, color: color || 'text-silver-300' })
-    })
-  } finally {
-    isExportingImage.value = false
-  }
-}
+;(window as any).exportAuditReport = exportAuditReport
 const savedBottomPanelHeight = ref(300)
 const activeGraphPreset = ref<number | null>(null)
 
@@ -2464,19 +2682,6 @@ function toggleMaximizeGraph() {
     isGraphMaximized.value = true
     activeGraphPreset.value = 100
   }
-  nextTick(() => {
-    setTimeout(() => {
-      focusGraph()
-    }, 60)
-  })
-}
-
-function setGraphHeightPreset(percent: number) {
-  isGraphMaximized.value = false
-  activeGraphPreset.value = percent
-  const totalH = workspaceElement.value?.clientHeight || 700
-  const bottomH = Math.round(totalH * (1 - percent / 100))
-  setPanelHeight(bottomH)
   nextTick(() => {
     setTimeout(() => {
       focusGraph()
@@ -2809,6 +3014,8 @@ function openMainFile() {
   bottomPanelVisible.value = true
   activeBottomTab.value = 'code'
 }
+
+;(window as any).openMainFile = openMainFile
 // Methods
 function toggleLeftTab(tab: 'project' | 'analysis' | 'palette') {
   leftTab.value = leftTab.value === tab ? null : tab
@@ -2888,31 +3095,35 @@ function selectFile(filename: string) {
 function handleNodeClick(event: any) {
   const node = event?.node || event
   const nodeData = event?.node?.data || event?.data || {}
-    selectedGraphNode.value = {
-      id: node?.id,
-      label: nodeData.label || 'Выбранный элемент',
-      type: nodeData.type || nodeData.sublabel || 'STATEMENT',
-      code: nodeData.code || '',
-      filePath: nodeData.filePath,
-      line: nodeData.line,
+  selectedGraphNode.value = {
+    id: node?.id,
+    label: nodeData.label || 'Выбранный элемент',
+    type: nodeData.type || nodeData.sublabel || 'STATEMENT',
+    code: nodeData.code || '',
+    filePath: nodeData.filePath,
+    line: nodeData.line,
+  }
+
+  // Fast in-place selection update without recreating entire node array
+  for (let i = 0; i < graphNodes.value.length; i++) {
+    const candidate = graphNodes.value[i]
+    const isTarget = candidate.id === node?.id
+    if (candidate.selected !== isTarget) {
+      candidate.selected = isTarget
     }
-    graphNodes.value = graphNodes.value.map((candidate) => ({ ...candidate, selected: candidate.id === node?.id }))
+  }
+
   if (nodeData.filePath) {
     const matchingFile = Object.keys(projectFiles.value).find(
       (filePath) => filePath.replaceAll('\\', '/') === nodeData.filePath.replaceAll('\\', '/')
     )
-    if (matchingFile) {
+    if (matchingFile && currentFile.value !== matchingFile) {
       currentFile.value = matchingFile
     }
   }
   if (nodeData.line) {
     cursorLine.value = nodeData.line
     nextTick(() => highlightEditorRange(nodeData.line, nodeData.line))
-  }
-
-  // Toggle method tree downwards on click
-  if (nodeData.isMethod || nodeData.childCount) {
-    toggleMethodExpand(node?.id)
   }
 
   bottomPanelVisible.value = true
@@ -3004,6 +3215,13 @@ async function optimizeCode() {
   }
 }
 
+async function applyDirectOptimization() {
+  await optimizeCode()
+  if (pendingOptimizationResult.value) {
+    await applyPendingOptimization()
+  }
+}
+
 async function runDecomposition() {
   if (!projectLoaded.value || isProcessing.value) return
   verificationResult.value = null
@@ -3056,24 +3274,47 @@ async function runDecomposition() {
   }
 }
 
-const handleLoadDemoMonolith = async () => {
+async function decomposeCodeWithAi() {
+  if (!projectLoaded.value || isProcessing.value) return
+  verificationResult.value = null
+  optimizationChanges.value = null
+  optimizationError.value = null
+  pendingOptimizationResult.value = null
+
   isProcessing.value = true
   bottomPanelVisible.value = true
   activeBottomTab.value = 'console'
+  selectedGraphNode.value = null
   consoleLogs.value.push({
-    text: '[Demo] Загрузка эталонного монолита (~1000 строк, 43 КБ)...',
+    text: '[AI Decomposer] Запуск декомпозиции архитектуры...',
     color: 'text-silver-300'
   })
+
   try {
-    const result = await loadDemoProject()
-    handleProjectLoaded(result)
+    const result = await decomposeProjectWithAi()
+    pendingOptimizationResult.value = result
+    diffFile.value = result.after.project.mainFile
+    activeBottomTab.value = 'diff'
+
+    const moduleCount = Object.keys(result.after.project.files).length
     consoleLogs.value.push({
-      text: `[Demo] Монолит загружен: ${result.graph.nodes.length} узлов CFG, найдено ${result.analysis.defects.length} дефектов. Режим Unreal-вкладок активен.`,
+      text: `[AI Decomposer] Код успешно разделен на ${moduleCount} модуль(ей): ${Object.keys(result.after.project.files).join(', ')}. Нажмите «Применить» для сохранения изменений.`,
       color: 'text-sage-text'
     })
+
+    if (result.verification) {
+      consoleLogs.value.push({
+        text: result.verification.compilationSuccess
+          ? `[Verify] Сборка JDK 21 пройдена; поведение сохранено: ${result.verification.behaviorPreserved ? 'да' : 'нет'}; скорость: ${result.verification.speedupFactor.toFixed(1)}x`
+          : `[Verify] Ошибка компиляции: ${result.verification.originalErrors || result.verification.optimizedErrors}`,
+        color: result.verification.compilationSuccess ? 'text-sage-text' : 'text-[#b58585]'
+      })
+    }
   } catch (error: any) {
+    optimizationError.value = error.message || String(error)
+    activeBottomTab.value = 'optimization'
     consoleLogs.value.push({
-      text: `[Demo Error] Ошибка загрузки демо-монолита: ${error.message || error}`,
+      text: `[AI Decomposer Error] ${error.message || error}`,
       color: 'text-[#b58585]'
     })
   } finally {
@@ -3081,7 +3322,35 @@ const handleLoadDemoMonolith = async () => {
   }
 }
 
-;(window as any).handleLoadDemoMonolith = handleLoadDemoMonolith
+const isAnalyzingAi = ref(false)
+
+async function runAiDefectAudit() {
+  if (!projectLoaded.value || isAnalyzingAi.value) return
+  isAnalyzingAi.value = true
+  bottomPanelVisible.value = true
+  activeBottomTab.value = 'console'
+  consoleLogs.value.push({
+    text: '[AI Audit] Запуск глубокого семантического анализа дефектов...',
+    color: 'text-silver-300'
+  })
+
+  try {
+    const report = await analyzeProjectWithAi()
+    analysisReport.value = report
+    activeAnalysisTab.value = 'defects'
+    consoleLogs.value.push({
+      text: `[AI Audit] Анализ завершен. Обнаружено ${report.defects.length} дефектов и ${report.recommendations.length} рекомендаций.`,
+      color: 'text-sage-text'
+    })
+  } catch (error: any) {
+    consoleLogs.value.push({
+      text: `[AI Audit Error] ${error.message || error}`,
+      color: 'text-[#b58585]'
+    })
+  } finally {
+    isAnalyzingAi.value = false
+  }
+}
 
 async function optimizeCodeWithAi() {
   if (!projectLoaded.value || isProcessing.value) return
@@ -3095,7 +3364,7 @@ async function optimizeCodeWithAi() {
   activeBottomTab.value = 'console'
   selectedGraphNode.value = null
   consoleLogs.value.push({
-    text: '[AI Optimizer] Отправка запроса в Gemini AI (Google AI Studio Cloudflare Relay)...',
+    text: '[AI Optimizer] Запуск оптимизации кода...',
     color: 'text-silver-300'
   })
 
@@ -3109,8 +3378,8 @@ async function optimizeCodeWithAi() {
 
     consoleLogs.value.push({
       text: result.changes.length > 0
-        ? `[AI Optimizer] Gemini + AST подготовили ${result.changes.length} оптимизаций. Открыт Diff. Нажмите «Применить в проект» (зеленая кнопка) для записи нового кода и пересчета графа/дефектов.`
-        : '[AI Optimizer] Оптимизация готова. Нажмите «Применить в проект» для обновления.',
+        ? `[AI Optimizer] Подготовлено ${result.changes.length} оптимизаций. Нажмите «Применить» для записи изменений в проект.`
+        : '[AI Optimizer] Оптимизация готова. Нажмите «Применить» для обновления.',
       color: 'text-sage-text'
     })
 
@@ -3243,7 +3512,6 @@ async function runProjectCode() {
     isProcessing.value = false
   }
 }
-const runOptimization = runProjectCode
 </script>
 
 

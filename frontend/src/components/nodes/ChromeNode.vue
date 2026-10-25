@@ -86,10 +86,9 @@ const props = withDefaults(defineProps<{
   heatmapMode: false
 })
 
-const emit = defineEmits(['node-click', 'node-dblclick', 'toggle-expand', 'open-tab'])
+const emit = defineEmits(['node-dblclick', 'toggle-expand', 'open-tab'])
 
 function handleClick() {
-  emit('node-click', { node: props })
   if (props.data.isOverview) {
     emit('open-tab', props.id)
   }
@@ -141,14 +140,12 @@ const statusDotClass = computed(() => {
   background: #10131a;
   border: 1px solid rgba(255, 255, 255, 0.09);
   box-shadow: 0 2px 10px rgba(0, 0, 0, 0.35);
-  transition: border-color 0.2s ease, box-shadow 0.2s ease, transform 0.15s ease, background 0.2s ease;
+  transition: border-color 0.15s ease;
   cursor: pointer;
 }
 
 .chrome-node:hover {
   border-color: rgba(223, 230, 247, 0.72);
-  box-shadow: 0 4px 16px rgba(176, 196, 222, 0.14);
-  transform: translateY(-1px);
 }
 
 .chrome-node.node-defect-high {

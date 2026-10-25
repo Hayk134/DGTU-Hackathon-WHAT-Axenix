@@ -28,6 +28,9 @@ class GeminiService(
             envKeys.split(",", ";").map { it.trim() }.filter { it.isNotBlank() }
         } else {
             listOf(
+                "QVEuQWI4Uk42STJlQktCTEFIcFo2YkRrSjdWY1hoRENRZVlndk5yUHhDUTVlREJOZk1uTFE=",
+                "QUl6YVN5QU5LcF9tY2swQnRzLUV5VTRjNF8yaFdVZkdvZHZzQXU0",
+                "QVEuQWI4Uk42SnR5WXVEY3hTVVJBdS1qbVdMRGo5TlV3RlpWMDU0aF9XTUhzRG9kTDN3ZlE=",
                 "QVEuQWI4Uk42SllBVkt1ME5ra29tWVozUHJvWW10d3ZKMkhEZFVicURhRG5Wd1ozYmRmYnc=",
                 "QVEuQWI4Uk42S05uOEVpdV9ZRWh0TkVaYzFIcUt3eml1ajNaRTlDd2lRengyLXRtV2RLVXc=",
                 "QVEuQWI4Uk42SW1qMkZwaEtXZ2RwU1NtRDljaER5Z0FzVDA4UG1wRFhaTXFiWEwyQUQ1WHc=",
@@ -175,38 +178,32 @@ class GeminiService(
         val prompt = buildOptimizationPrompt(files, mainFile, analysis)
         val models = listOf(
             "gemini-3.5-flash-lite",
-            "gemini-3.5-flash",
-            "gemini-3-flash-preview",
-            "gemini-3.6-flash"
+            "gemini-3.5-flash"
         )
 
         var lastError: Exception? = null
 
         for (model in models) {
-            val timeoutSec = if (prompt.length > 8000) 40L else 25L
+            val timeoutSec = if (prompt.length > 8000) 45L else 25L
             for (attempt in 0 until apiKeys.size) {
                 val key = getNextKey()
                 try {
                     val rawResponse = sendGeminiRequest(model, key, prompt, timeoutSec)
                     val result = parseGeminiResponse(rawResponse, files, mainFile)
                     if (result.first.isNotEmpty()) {
-                        log.info("AI Optimization successfully generated with model={}", model)
+                        log.info("AI Optimization successfully generated with model={} key=...{}", model, key.takeLast(6))
                         return result
                     }
                 } catch (e: Exception) {
                     val msg = e.message ?: ""
-                    log.warn("Gemini call failed (model=$model, attempt=$attempt): {}", msg)
+                    log.warn("Gemini call failed (model={}, attempt={}/{}, key=...{}): {}", model, attempt + 1, apiKeys.size, key.takeLast(6), msg)
                     lastError = e
-                    if (msg.contains("404") || msg.contains("503") || msg.contains("UNAVAILABLE")) {
-                        log.info("Model {} unavailable (404/503), skipping immediately to next model", model)
-                        break
-                    }
-                    // On 429 quota or timeout on this key, try next key in pool
+                    // Immediately try next key in pool on 500, 429, 503, timeout
                 }
             }
         }
 
-        throw IllegalStateException("AI optimization failed across all keys and models: ${lastError?.message}", lastError)
+        throw IllegalStateException("Ошибка 500: Не удалось подключиться к сервису AI (сервис временно перегружен или исчерпаны квоты). Используйте локальную оптимизацию через AST.", lastError)
     }
 
     private fun verifyAndSelfCorrect(
@@ -239,7 +236,7 @@ class GeminiService(
 
             log.warn("AI optimized code had compilation errors:\n{}. Attempting self-correction...", diagnostic.errors)
 
-            // 1 correction attempt with Gemini
+            // 1 correction attempt with AI
             val correctionPrompt = """
                 The Java code you produced failed to compile with Java 21 compiler:
                 ${diagnostic.errors}
@@ -257,24 +254,31 @@ class GeminiService(
                 }
             """.trimIndent()
 
-            for (model in listOf("gemini-3.5-flash-lite", "gemini-3.5-flash", "gemini-3-flash-preview")) {
-                val timeoutSec = 20L
-                for (attempt in 0 until 2) {
-                    try {
-                        val rawResponse = sendGeminiRequest(model, getNextKey(), correctionPrompt, timeoutSec)
-                        val corrected = parseGeminiResponse(rawResponse, originalFiles, mainFile).first
-                        val recheck = verifier.compileJavaCode(corrected, tempDir)
-                        if (recheck.success) {
-                            return corrected
-                        }
-                    } catch (e: Exception) {
-                        log.warn("Self-correction attempt failed: {}", e.message)
+            for (model in listOf("gemini-3.5-flash-lite", "gemini-3.5-flash")) {
+                val timeoutSec = 35L
+                val key = getNextKey()
+                try {
+                    val rawResponse = sendGeminiRequest(model, key, correctionPrompt, timeoutSec)
+                    val corrected = parseGeminiResponse(rawResponse, originalFiles, mainFile).first
+                    val recheck = verifier.compileJavaCode(corrected, tempDir)
+                    if (recheck.success) {
+                        log.info("AI self-correction successfully compiled using model={} key=...{}", model, key.takeLast(6))
+                        return corrected
                     }
+                } catch (e: Exception) {
+                    log.warn("Self-correction attempt failed with model={} key=...{}: {}", model, key.takeLast(6), e.message)
                 }
             }
 
-            log.error("Self-correction failed with errors:\n{}", diagnostic.errors)
-            throw IllegalStateException("Код от Gemini не компилируется компилятором JDK 21:\n${diagnostic.errors}")
+            log.warn("AI self-correction did not produce compiling code. Falling back to verified AST optimizer.")
+            try {
+                val parsedCu = astParser.parseJavaFile(mainFile, originalFiles[mainFile] ?: "")
+                val (astFiles, _) = astOptimizer.optimizeAndDecompose(parsedCu, mainFile, applyOptimizations = true, decomposeMonolith = false)
+                if (astFiles.isNotEmpty()) return astFiles
+            } catch (e: Exception) {
+                log.warn("Fallback to AST optimizer failed: {}", e.message)
+            }
+            return originalFiles
         } finally {
             tempDir.deleteRecursively()
         }
@@ -297,6 +301,7 @@ class GeminiService(
             putJsonObject("generationConfig") {
                 put("responseMimeType", "application/json")
                 put("temperature", 0.1)
+                put("maxOutputTokens", 65536)
             }
         }.toString()
 
@@ -349,7 +354,13 @@ class GeminiService(
         val text = parts?.firstOrNull()?.jsonObject?.get("text")?.jsonPrimitive?.content
             ?: throw IllegalStateException("Empty response text from Gemini")
 
-        val payload = json.parseToJsonElement(text).jsonObject
+        val cleanText = text.trim()
+            .removePrefix("```json")
+            .removePrefix("```")
+            .removeSuffix("```")
+            .trim()
+
+        val payload = json.parseToJsonElement(cleanText).jsonObject
 
         val filesMap = mutableMapOf<String, String>()
         val filesElement = payload["files"]
@@ -379,6 +390,13 @@ class GeminiService(
                     normalizedFiles[origName] = filesMap[origName]!!
                 } else {
                     normalizedFiles[origName] = fallbackFiles[origName]!!
+                }
+            }
+            // Keep any newly created modular classes generated by Gemini
+            filesMap.forEach { (name, content) ->
+                val cleanName = if (name.endsWith(".java")) name else "$name.java"
+                if (!normalizedFiles.containsKey(cleanName) && !normalizedFiles.containsKey(name)) {
+                    normalizedFiles[cleanName] = content
                 }
             }
         }
@@ -476,6 +494,328 @@ class GeminiService(
             }
             
             Source code to optimize:
+            $codeSnippets
+        """.trimIndent()
+    }
+
+    fun analyzeProjectWithAi(): AnalysisReport {
+        val project = ProjectRepository.getProject()
+            ?: throw IllegalStateException("No project loaded")
+
+        val currentFiles = ProjectRepository.getCurrentFiles()
+        val mainFile = project.mainFile
+
+        val cu = ProjectRepository.getCompilationUnit("default", mainFile)
+            ?: throw IllegalStateException("No compilation unit found for $mainFile")
+
+        // 1. Base AST metrics for structure and counts
+        val baseReport = analyzer.analyzeCode(cu, mainFile)
+
+        // 2. Call AI to detect deep semantic, architectural, and algorithmic defects
+        val prompt = buildAnalysisPrompt(currentFiles, mainFile)
+        val models = listOf("gemini-3.5-flash-lite", "gemini-3.5-flash")
+        var lastError: Exception? = null
+
+        for (model in models) {
+            val timeoutSec = if (prompt.length > 8000) 45L else 25L
+            for (attempt in 0 until apiKeys.size) {
+                val key = getNextKey()
+                try {
+                    val rawResponse = sendGeminiRequest(model, key, prompt, timeoutSec)
+                    val aiReport = parseAiAnalysisResponse(rawResponse, mainFile, baseReport)
+                    log.info("AI Analysis successfully generated with model={} key=...{}", model, key.takeLast(6))
+                    return aiReport
+                } catch (e: Exception) {
+                    val msg = e.message ?: ""
+                    log.warn("AI analysis failed (model={}, attempt={}/{}, key=...{}): {}", model, attempt + 1, apiKeys.size, key.takeLast(6), msg)
+                    lastError = e
+                    // Immediately try next key in pool on 500, 429, 503, timeout
+                }
+            }
+        }
+
+        throw IllegalStateException("Ошибка 500: Не удалось подключиться к сервису AI для анализа кода (сервис временно недоступен или исчерпан лимит квот). ${lastError?.message}", lastError)
+    }
+
+    private fun buildAnalysisPrompt(files: Map<String, String>, mainFile: String): String {
+        val codeSnippets = files.entries.joinToString("\n\n") { (name, content) ->
+            "// === File: $name ===\n$content"
+        }
+
+        return """
+            You are a Principal Java Performance & Code Quality Auditor.
+            Analyze the following Java code for REAL architectural defects, critical performance bottlenecks (such as O(n²) or worse nested loops, unnecessary duplicate collection lookups), memory leak patterns, string concatenation in loops, and bad smells.
+            
+            DO NOT return fake or generic mock-like descriptions.
+            Be extremely precise. Cite the exact startLine and exact codeFragment from the provided code.
+            
+            Return ONLY a valid JSON object matching this schema:
+            {
+              "defects": [
+                {
+                  "type": "NESTED_COMPLEXITY",
+                  "severity": "HIGH",
+                  "startLine": 15,
+                  "endLine": 25,
+                  "title": "Краткое название проблемы на русском",
+                  "description": "Детальное объяснение сути проблемы, почему это дефект и реальный риск на русском",
+                  "complexity": "O(n²)",
+                  "codeFragment": "фрагмент кода"
+                }
+              ],
+              "recommendations": [
+                {
+                  "title": "Заголовок рекомендации на русском",
+                  "description": "Как именно исправить проблему на русском",
+                  "expectedBenefit": "Ожидаемый эффект (например: Ускорение алгоритма до O(n), снижение утилизации памяти)"
+                }
+              ]
+            }
+            
+            Supported types for 'type': NESTED_COMPLEXITY, INEFFICIENT_LOOP, LONG_METHOD, DUPLICATED_LOGIC, HIDDEN_COMPLEXITY.
+            Supported severities for 'severity': HIGH, MEDIUM, LOW.
+            
+            Source code to analyze:
+            $codeSnippets
+        """.trimIndent()
+    }
+
+    private fun parseAiAnalysisResponse(
+        rawJson: String,
+        mainFile: String,
+        baseReport: AnalysisReport
+    ): AnalysisReport {
+        val root = json.parseToJsonElement(rawJson).jsonObject
+        val candidates = root["candidates"]?.jsonArray
+        val candidate = candidates?.firstOrNull()?.jsonObject
+        val content = candidate?.get("content")?.jsonObject
+        val parts = content?.get("parts")?.jsonArray
+        val text = parts?.firstOrNull()?.jsonObject?.get("text")?.jsonPrimitive?.content
+            ?: throw IllegalStateException("Empty response text from Gemini")
+
+        val cleanText = text.trim()
+            .removePrefix("```json")
+            .removePrefix("```")
+            .removeSuffix("```")
+            .trim()
+
+        val payload = json.parseToJsonElement(cleanText).jsonObject
+        val defectsList = mutableListOf<Defect>()
+        val recommendationsList = mutableListOf<Recommendation>()
+
+        val defectsArray = payload["defects"]?.jsonArray
+        defectsArray?.forEachIndexed { index, el ->
+            if (el is JsonObject) {
+                val typeStr = el["type"]?.jsonPrimitive?.content ?: "NESTED_COMPLEXITY"
+                val defectType = try {
+                    DefectType.valueOf(typeStr)
+                } catch (_: Exception) {
+                    DefectType.NESTED_COMPLEXITY
+                }
+                val severityStr = el["severity"]?.jsonPrimitive?.content ?: "HIGH"
+                val severity = try {
+                    Severity.valueOf(severityStr)
+                } catch (_: Exception) {
+                    Severity.HIGH
+                }
+                val startLine = el["startLine"]?.jsonPrimitive?.intOrNull ?: 1
+                val endLine = el["endLine"]?.jsonPrimitive?.intOrNull ?: (startLine + 2)
+                val title = el["title"]?.jsonPrimitive?.content ?: "Дефект алгоритмической сложности"
+                val description = el["description"]?.jsonPrimitive?.content ?: "Обнаружен дефект в структуре кода"
+                val complexity = el["complexity"]?.jsonPrimitive?.contentOrNull ?: "O(n²)"
+                val codeFragment = el["codeFragment"]?.jsonPrimitive?.content ?: ""
+
+                defectsList.add(
+                    Defect(
+                        id = "ai_defect_${index}_${startLine}",
+                        type = defectType,
+                        severity = severity,
+                        location = SourceLocation(mainFile, startLine, endLine, 1, 1),
+                        title = title,
+                        description = description,
+                        complexity = complexity,
+                        codeFragment = codeFragment
+                    )
+                )
+            }
+        }
+
+        val recsArray = payload["recommendations"]?.jsonArray
+        recsArray?.forEachIndexed { index, el ->
+            if (el is JsonObject) {
+                val title = el["title"]?.jsonPrimitive?.content ?: "Оптимизация архитектуры"
+                val description = el["description"]?.jsonPrimitive?.content ?: ""
+                val expectedBenefit = el["expectedBenefit"]?.jsonPrimitive?.content ?: ""
+                val defectId = defectsList.getOrNull(index)?.id ?: "ai_defect_$index"
+                recommendationsList.add(
+                    Recommendation(
+                        defectId = defectId,
+                        title = title,
+                        description = description,
+                        expectedBenefit = expectedBenefit
+                    )
+                )
+            }
+        }
+
+        val finalDefects = if (defectsList.isNotEmpty()) defectsList else baseReport.defects
+        val finalRecommendations = if (recommendationsList.isNotEmpty()) recommendationsList else baseReport.recommendations
+
+        return AnalysisReport(
+            defects = finalDefects,
+            metrics = baseReport.metrics,
+            recommendations = finalRecommendations
+        )
+    }
+
+    fun decomposeProjectWithAi(): OptimizationResult {
+        val project = ProjectRepository.getProject()
+            ?: throw IllegalStateException("No project loaded")
+
+        val originalFiles = ProjectRepository.getOriginalFiles()
+        val currentFiles = ProjectRepository.getCurrentFiles()
+        val mainFile = project.mainFile
+
+        val cu = ProjectRepository.getCompilationUnit("default", mainFile)
+            ?: throw IllegalStateException("No compilation unit found for $mainFile")
+
+        // 1. Capture before state
+        val beforeGraph = astParser.buildBlueprintGraph(cu, mainFile)
+        val beforeAnalysis = analyzer.analyzeCode(cu, mainFile)
+        val beforeResponse = ProjectWorkspaceResponse(
+            project = ProjectState(currentFiles, mainFile),
+            graph = beforeGraph,
+            analysis = beforeAnalysis
+        )
+
+        // 2. Call AI for architectural decomposition
+        val prompt = buildDecompositionPrompt(currentFiles, mainFile)
+        val models = listOf("gemini-3.5-flash-lite", "gemini-3.5-flash")
+        var lastError: Exception? = null
+        var result: Pair<Map<String, String>, List<OptimizationChange>>? = null
+
+        for (model in models) {
+            val timeoutSec = if (prompt.length > 8000) 45L else 30L
+            for (attempt in 0 until apiKeys.size) {
+                val key = getNextKey()
+                try {
+                    val rawResponse = sendGeminiRequest(model, key, prompt, timeoutSec)
+                    val parsed = parseGeminiResponse(rawResponse, currentFiles, mainFile)
+                    if (parsed.first.isNotEmpty()) {
+                        log.info("AI Decomposition successfully generated with model={} key=...{}", model, key.takeLast(6))
+                        result = parsed
+                        break
+                    }
+                } catch (e: Exception) {
+                    val msg = e.message ?: ""
+                    log.warn("AI decomposition failed (model={}, attempt={}/{}, key=...{}): {}", model, attempt + 1, apiKeys.size, key.takeLast(6), msg)
+                    lastError = e
+                    // Immediately try next key in pool on 500, 429, 503, timeout
+                }
+            }
+            if (result != null) break
+        }
+
+        if (result == null) {
+            throw IllegalStateException("Ошибка 500: Не удалось подключиться к сервису AI для декомпозиции: ${lastError?.message}", lastError)
+        }
+
+        val (decomposedFiles, changes) = result
+
+        // 3. Compile check & self-correction
+        val verifiedFiles = verifyAndSelfCorrect(currentFiles, decomposedFiles, mainFile)
+
+        val mainEntryFile = if (verifiedFiles.containsKey(mainFile)) {
+            mainFile
+        } else {
+            verifiedFiles.entries.firstOrNull { (_, source) ->
+                Regex("""\bstatic\s+void\s+main\s*\(\s*String\s*(\[\s*\]|\.\.\.)""").containsMatchIn(source)
+            }?.key ?: verifiedFiles.keys.first()
+        }
+
+        val parsedMainCu = astParser.parseJavaFile(mainEntryFile, verifiedFiles[mainEntryFile]!!)
+        val afterGraph = astParser.buildBlueprintGraph(parsedMainCu, mainEntryFile)
+        val fileAnalyses = verifiedFiles.mapNotNull { (path, content) ->
+            try {
+                analyzer.analyzeCode(astParser.parseJavaFile(path, content), path)
+            } catch (_: Exception) {
+                null
+            }
+        }
+
+        val afterAnalysis = AnalysisReport(
+            defects = fileAnalyses.flatMap { it.defects },
+            metrics = CodeMetrics(
+                totalLines = fileAnalyses.sumOf { it.metrics.totalLines },
+                totalMethods = fileAnalyses.sumOf { it.metrics.totalMethods },
+                averageComplexity = if (fileAnalyses.isNotEmpty()) {
+                    fileAnalyses.map { it.metrics.averageComplexity * it.metrics.totalMethods }.sum() /
+                        fileAnalyses.sumOf { it.metrics.totalMethods }.coerceAtLeast(1)
+                } else 0.0,
+                maxComplexity = fileAnalyses.maxOfOrNull { it.metrics.maxComplexity } ?: 0,
+                duplicatedBlocks = fileAnalyses.sumOf { it.metrics.duplicatedBlocks }
+            ),
+            recommendations = fileAnalyses.flatMap { it.recommendations }
+        )
+
+        val afterResponse = ProjectWorkspaceResponse(
+            project = ProjectState(verifiedFiles, mainEntryFile),
+            graph = afterGraph,
+            analysis = afterAnalysis
+        )
+
+        // 4. Verification
+        val verification = verifier.runVerification(
+            originalFiles,
+            verifiedFiles,
+            emptyList()
+        )
+
+        return OptimizationResult(
+            before = beforeResponse,
+            after = afterResponse,
+            changes = changes,
+            verification = verification
+        )
+    }
+
+    private fun buildDecompositionPrompt(files: Map<String, String>, mainFile: String): String {
+        val codeSnippets = files.entries.joinToString("\n\n") { (name, content) ->
+            "// === File: $name ===\n$content"
+        }
+
+        val baseName = mainFile.substringAfterLast('/').substringBeforeLast(".java")
+
+        return """
+            You are a Principal Java Enterprise Architect.
+            Decompose the following monolithic or heavy Java class into multiple cleanly separated, Single-Responsibility classes.
+            
+            Key requirements:
+            1. Decompose into 2-4 distinct, focused classes (e.g. ${baseName}Core.java, ${baseName}Processor.java, ${baseName}Helper.java, or Parser.java, Analyzer.java).
+            2. The original entry class ($mainFile) MUST remain as a Facade retaining its original class name, constructors, and public API methods.
+            3. Methods moved to auxiliary classes should be delegated from the original class (e.g., `return HelperClass.someMethod(args);`), so that all existing callers and tests remain 100% compatible.
+            4. If methods in the class were instance methods, extract their core algorithmic logic into public static or auxiliary methods that don't depend on instance fields, and call them from the facade.
+            5. Every created class must be in its own entry in "files" with its own .java filename and valid package/imports.
+            6. PRESERVE EXACT FUNCTIONALITY AND OUTPUTS under Java 21.
+            
+            Return ONLY a valid JSON object matching this schema:
+            {
+              "files": {
+                "$mainFile": "Updated facade code for $mainFile",
+                "${baseName}Processor.java": "Full code for ${baseName}Processor",
+                "${baseName}Helper.java": "Full code for ${baseName}Helper"
+              },
+              "changes": [
+                {
+                  "type": "Architecture Decomposition",
+                  "description": "Краткое описание выноса логики на русском языке",
+                  "complexityBefore": "Монолит",
+                  "complexityAfter": "Модульная архитектура"
+                }
+              ]
+            }
+            
+            Source code to decompose:
             $codeSnippets
         """.trimIndent()
     }

@@ -44,6 +44,7 @@ export interface AuditReportData {
     deletions: number
     changesCount?: number
   }
+  optimizedCode?: string
 }
 
 export function generateAuditMarkdown(data: AuditReportData): string {
@@ -75,7 +76,7 @@ export function generateAuditMarkdown(data: AuditReportData): string {
     : '| — | *Тестовый набор не запускался* | — | — | — |'
 
   return `# WHAT: Аудиторский отчет оптимизации Java-проекта
-**Платформа:** WHAT Enterprise Blueprint Suite (Axenix Case 2026)  
+**Платформа:** TECHNOLOGY  
 **Дата генерации:** ${data.timestamp}  
 **Целевой класс / файл:** \`${data.mainFile || 'Main.java'}\`  
 **Среда исполнения:** Java 21 LTS (Oracle OpenJDK)  
@@ -130,7 +131,7 @@ ${testsRows}
 ## 6. Заключение аудита
 Оптимизированный исходный код компилируется в среде Java 21, сохраняет функциональную эквивалентность бизнес-логики и демонстрирует доказанное ускорение алгоритма.
 
-*Отчет сформирован автоматически платформой WHAT • Axenix Hackathon 2026*
+*Отчет сформирован платформой TECHNOLOGY*
 `
 }
 
@@ -440,6 +441,7 @@ export function generateAuditHtml(data: AuditReportData): string {
       .badge-low { background: #dbeafe !important; color: #1e40af !important; border-color: #93c5fd !important; }
       .badge-resolved { background: #dcfce7 !important; color: #166534 !important; border-color: #86efac !important; }
       .badge-active { background: #fee2e2 !important; color: #991b1b !important; }
+      pre, code { background: #f8fafc !important; color: #0f172a !important; }
     }
   </style>
 </head>
@@ -465,7 +467,7 @@ export function generateAuditHtml(data: AuditReportData): string {
     <!-- Header Block -->
     <div class="header-card">
       <div>
-        <div class="logo-badge">WHAT ENTERPRISE SUITE</div>
+        <div class="logo-badge">TECHNOLOGY</div>
         <h1>Аудиторский отчет оптимизации кода</h1>
         <p class="meta-text">
           <span><strong>Файл:</strong> <code>${escapeHtml(data.mainFile || 'Main.java')}</code></span>
@@ -477,7 +479,6 @@ export function generateAuditHtml(data: AuditReportData): string {
         <span class="badge ${isQGSuccess ? 'badge-resolved' : 'badge-med'}" style="font-size: 11px; padding: 4px 10px;">
           ${isQGSuccess ? 'Quality Gate: PASSED ✓' : 'Quality Gate: PENDING'}
         </span>
-        <div style="font-size: 10px; color: var(--text-muted); margin-top: 6px;">Axenix Hackathon 2026</div>
       </div>
     </div>
 
@@ -602,8 +603,18 @@ export function generateAuditHtml(data: AuditReportData): string {
       </div>
     </div>
 
+    <!-- Optimized Code Section -->
+    ${data.optimizedCode ? `
+    <div class="section-title">
+      <span>4. Исправленный оптимизированный Java-код (Типы данных и структуры: HashSet / HashMap / Java 21)</span>
+    </div>
+    <div style="background: #090d14; border: 1px solid var(--border); border-radius: 8px; padding: 16px; margin-bottom: 24px; overflow-x: auto;">
+      <pre style="margin: 0; font-family: 'JetBrains Mono', Consolas, monospace; font-size: 11px; line-height: 1.5; color: #d8e2ef; white-space: pre-wrap;"><code>${escapeHtml(data.optimizedCode)}</code></pre>
+    </div>
+    ` : ''}
+
     <div class="report-footer">
-      <div>WHAT Enterprise Blueprint Platform • Разработано для кейса Axenix 2026</div>
+      <div>TECHNOLOGY</div>
       <div style="margin-top: 4px; font-family: monospace; font-size: 10px;">ID Отчета: ${Math.random().toString(36).substring(2, 10).toUpperCase()} • SHA-256 Verified</div>
     </div>
 

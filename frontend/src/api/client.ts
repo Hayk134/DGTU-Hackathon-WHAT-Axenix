@@ -1,5 +1,7 @@
 // API client for Java Blueprints Backend
-const API_BASE_URL = 'http://localhost:8080/api'
+const API_BASE_URL = typeof window !== 'undefined' && (window.location.port === '8080' || !window.location.port)
+  ? '/api'
+  : 'http://localhost:8080/api'
 
 export interface GraphNode {
   id: string
@@ -128,15 +130,6 @@ export async function loadProject(params: {
   return response.json()
 }
 
-export async function loadDemoProject(): Promise<ProjectWorkspaceResponse> {
-  const response = await fetch(`${API_BASE_URL}/project/load-demo`, {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-  })
-  if (!response.ok) throw new Error('Failed to load demo project')
-  return response.json()
-}
-
 export async function parseCode(params: {
   filePath: string
   content: string
@@ -193,6 +186,30 @@ export async function optimizeProjectWithAi(): Promise<OptimizationResult> {
   return response.json()
 }
 
+export async function analyzeProjectWithAi(): Promise<AnalysisReport> {
+  const response = await fetch(`${API_BASE_URL}/project/analyze-ai`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+  })
+  if (!response.ok) {
+    const errorData = await response.json().catch(() => ({}))
+    throw new Error(errorData.details || errorData.error || `HTTP ${response.status}`)
+  }
+  return response.json()
+}
+
+export async function decomposeProjectWithAi(): Promise<OptimizationResult> {
+  const response = await fetch(`${API_BASE_URL}/project/decompose-ai`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+  })
+  if (!response.ok) {
+    const errorData = await response.json().catch(() => ({}))
+    throw new Error(errorData.details || errorData.error || `HTTP ${response.status}`)
+  }
+  return response.json()
+}
+
 export async function applyOptimization(params: {
   files: Record<string, string>
   mainFile?: string
@@ -216,5 +233,28 @@ export async function verifyProject(params?: { inputs?: string[] }): Promise<Ver
     body: JSON.stringify(params || {}),
   })
   if (!response.ok) throw new Error('Failed to verify project')
+  return response.json()
+}
+
+export interface TerminalExecResponse {
+  output: string
+  cwd: string
+  exitCode: number
+  environment: string
+}
+
+export async function executeTerminalCommand(params: {
+  command: string
+  cwd?: string
+}): Promise<TerminalExecResponse> {
+  const response = await fetch(`${API_BASE_URL}/terminal/exec`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(params),
+  })
+  if (!response.ok) {
+    const errorData = await response.json().catch(() => ({}))
+    throw new Error(errorData.details || errorData.error || `HTTP ${response.status}`)
+  }
   return response.json()
 }

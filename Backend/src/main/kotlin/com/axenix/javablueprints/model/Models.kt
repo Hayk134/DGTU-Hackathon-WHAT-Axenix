@@ -209,3 +209,17 @@ data class ErrorResponse(
     val error: String,
     val details: String
 )
+
+@Serializable
+data class TerminalExecRequest(
+    val command: String,
+    val cwd: String? = null
+)
+
+@Serializable
+data class TerminalExecResponse(
+    val output: String,
+    val cwd: String,
+    val exitCode: Int,
+    val environment: String = "WSL2 (Linux)"
+)

@@ -1,18 +1,19 @@
 @echo off
-setlocal
+setlocal enabledelayedexpansion
 cd /d "%~dp0"
 
 echo [Java Blueprints] Stopping any lingering processes on ports 8080 and 5173...
-for /f "tokens=5" %%a in ('netstat -aon ^| findstr ":8080 .*LISTENING"') do taskkill /F /PID %%a >nul 2>&1
-for /f "tokens=5" %%a in ('netstat -aon ^| findstr ":5173 .*LISTENING"') do taskkill /F /PID %%a >nul 2>&1
+powershell -NoProfile -Command "Get-NetTCPConnection -LocalPort 8080,5173 -ErrorAction SilentlyContinue | ForEach-Object { Stop-Process -Id $_.OwningProcess -Force -ErrorAction SilentlyContinue }"
 
 if not exist "%~dp0frontend\node_modules\" (
-  echo [Java Blueprints] Installing frontend dependencies (first launch)...
-  cmd /c "cd /d "%~dp0frontend" && call npm install"
+  echo [Java Blueprints] Installing frontend dependencies...
+  cd /d "%~dp0frontend"
+  call npm install
+  cd /d "%~dp0"
 )
 
 echo [Java Blueprints] Starting backend (Ktor + Netty on JDK 21)...
-start "Java Blueprints Backend" cmd /c "cd /d "%~dp0Backend" && call gradlew.bat run --no-daemon"
+start "Java Blueprints Backend" cmd /k "cd /d "%~dp0Backend" && gradlew.bat run --no-daemon"
 
 echo [Java Blueprints] Waiting for backend health endpoint (http://localhost:8080/api/health)...
 set /a attempts=0
@@ -22,17 +23,16 @@ powershell -NoProfile -Command "try { $r = Invoke-WebRequest -UseBasicParsing ht
 if %errorlevel% equ 0 goto backend_ready
 if %attempts% geq 60 (
   echo ERROR: Backend did not become ready within 120 seconds.
-  echo Please check if JDK 21 is available and port 8080 is accessible.
   pause
   exit /b 1
 )
-timeout /t 2 /nobreak >nul
+ping 127.0.0.1 -n 3 >nul
 goto wait_backend
 
 :backend_ready
 echo [Java Blueprints] Backend is healthy! Starting frontend (Vite)...
-start "Java Blueprints Frontend" cmd /c "cd /d "%~dp0frontend" && npm run dev -- --host localhost"
-timeout /t 3 /nobreak >nul
+start "Java Blueprints Frontend" cmd /k "cd /d "%~dp0frontend" && npm run dev -- --host localhost"
+ping 127.0.0.1 -n 4 >nul
 echo [Java Blueprints] Opening application in browser at http://localhost:5173
 start "" http://localhost:5173
 endlocal

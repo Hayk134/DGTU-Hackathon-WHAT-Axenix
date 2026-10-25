@@ -1,18 +1,18 @@
 <template>
   <div class="relative">
     <button
-      class="jb-btn-silver relative overflow-hidden"
+      class="jb-btn-silver !w-7 !h-7 !p-0 relative overflow-hidden transition-all flex items-center justify-center cursor-pointer select-none"
       @click="handleClick"
       :disabled="isUploading"
+      :title="isUploading ? 'Загрузка...' : 'Импортировать Java-файлы'"
     >
       <FileInput class="w-3.5 h-3.5" />
-      <span>{{ isUploading ? 'Загрузка...' : 'Импорт' }}</span>
       
       <div 
         v-if="isUploading"
-        class="absolute inset-0 bg-white/80 flex items-center justify-center"
+        class="absolute inset-0 bg-black/60 flex items-center justify-center"
       >
-        <Loader2 class="w-3.5 h-3.5 animate-spin text-black" />
+        <Loader2 class="w-3.5 h-3.5 animate-spin text-white" />
       </div>
     </button>
 
@@ -33,7 +33,7 @@
     >
       <div
         v-if="statusMessage"
-        class="absolute top-full mt-2 left-0 min-w-[240px] px-3 py-2 rounded border text-xs font-mono whitespace-nowrap z-50"
+        class="absolute top-full mt-2 right-0 min-w-[240px] px-3 py-2 rounded border text-xs font-mono whitespace-nowrap z-50 shadow-2xl"
         :class="statusClass"
       >
         <div class="flex items-center gap-2">

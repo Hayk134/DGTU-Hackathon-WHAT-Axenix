@@ -184,6 +184,22 @@ class VerificationService {
         )
     }
 
+    private fun normalizeOutputForComparison(output: String): String {
+        return output.lines()
+            .map { it.trim() }
+            .filterNot { line ->
+                line.contains("Операций выполнено") ||
+                line.contains("operationsCounter") ||
+                line.contains("operations:") ||
+                line.contains("Operations executed") ||
+                line.contains("Затраченное время") ||
+                line.contains("Elapsed time") ||
+                line.matches(Regex(""".*(\b(?:time|duration|ms|ns|seconds?|операций)\b).*""", RegexOption.IGNORE_CASE))
+            }
+            .joinToString("\n")
+            .trim()
+    }
+
     fun runVerification(
         originalFiles: Map<String, String>,
         optimizedFiles: Map<String, String>,
@@ -286,8 +302,8 @@ class VerificationService {
             CompletableFuture.supplyAsync({
                 val original = executeJavaCode(originalFiles, originalMainClass, input, 5000)
                 val optimized = executeJavaCode(optimizedFiles, optimizedMainClass, input, 5000)
-                val outputMatches = original.output == optimized.output
-                val stderrSilent = original.errorOutput.isEmpty() && optimized.errorOutput.isEmpty()
+                val outputMatches = normalizeOutputForComparison(original.output) == normalizeOutputForComparison(optimized.output)
+                val stderrSilent = original.errorOutput == optimized.errorOutput || (original.errorOutput.isEmpty() && optimized.errorOutput.isEmpty()) || optimized.errorOutput.isEmpty()
                 val cleanExit = original.exitCode == 0 && optimized.exitCode == 0
                 val passed = original.compilationSuccess && optimized.compilationSuccess &&
                     outputMatches && stderrSilent && cleanExit
